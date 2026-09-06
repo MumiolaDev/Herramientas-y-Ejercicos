@@ -135,6 +135,7 @@ MatplotlibAnimator(traj).guardar("pozo.gif", fps=25)
 ```bash
 PYTHONPATH=. python3 examples/pozo_infinito.py        # paquete rebotando en las paredes
 PYTHONPATH=. python3 examples/oscilador_armonico.py   # paquete oscilando (estado casi-coherente)
+PYTHONPATH=. python3 examples/barrera_potencial.py    # efecto túnel: <E> < V0 y aun así transmite
 PYTHONPATH=. python3 examples/validar_autoestados.py  # chequeo de estacionariedad
 ```
 
@@ -150,10 +151,27 @@ de norma y energía.
 pytest
 ```
 
+## Efecto túnel (barrera de potencial)
+
+`PotentialBarrier` (`potentials/barrier.py`) no tiene autoestados analíticos
+—el problema natural ahí es de scattering, no de estados ligados en L²—, así
+que la validación no es "la densidad queda estacionaria" sino algo más
+físico todavía: con un paquete de energía media **menor** que la altura de
+la barrera, debe aparecer probabilidad no despreciable del otro lado, algo
+clásicamente prohibido de plano. `examples/barrera_potencial.py` corre
+exactamente ese caso (`<E>=0.53` contra `V0=1.0`) e imprime tanto la
+transmisión numérica del paquete real como el `T(E)` teórico de la barrera
+rectangular *estacionaria* evaluado en esa energía media —quedan cerca
+(0.20 numérico vs. 0.196 teórico) pero no iguales, y la razón es instructiva:
+un paquete gaussiano no es monocromático, así que su transmisión real es un
+promedio de `T(E)` sobre su propio espectro de energías, no `T(<E>)`.
+`tests/test_barrera.py` fija ese comportamiento como regresión (transmisión
+apreciable pero minoritaria, con la mayoría reflejada).
+
 ## Roadmap
 
-- **Más potenciales 1D**: pozo finito, barrera (efecto túnel), doble pozo
-  — cada uno es solo una clase `Potential` nueva; el solver no cambia.
+- **Más potenciales 1D**: pozo finito, doble pozo — cada uno es solo una
+  clase `Potential` nueva; el solver no cambia.
 - **2D**: extender `Grid1D`/`Hamiltonian1D` a una malla 2D con FFT en ambos
   ejes — útil para ilustrar difracción, potenciales tipo billar cuántico.
 - **Átomo de hidrógeno**: separar la parte angular (armónicos esféricos,
