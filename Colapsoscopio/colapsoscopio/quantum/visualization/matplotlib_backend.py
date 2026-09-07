@@ -11,7 +11,7 @@ matplotlib.use("Agg")  # backend sin display: sirve tanto en escritorio como hea
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-from colapsoscopio.simulation import Trajectory
+from colapsoscopio.quantum.simulation import Trajectory
 
 
 class MatplotlibAnimator:

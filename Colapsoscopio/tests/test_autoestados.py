@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from colapsoscopio import Grid1D, Simulation, SimulationConfig
-from colapsoscopio.initial_conditions import Eigenstate
-from colapsoscopio.potentials import HarmonicOscillator, InfiniteWell
+from colapsoscopio.quantum.initial_conditions import Eigenstate
+from colapsoscopio.quantum.potentials import HarmonicOscillator, InfiniteWell
 
 
 @pytest.mark.parametrize("n", [1, 2, 3])

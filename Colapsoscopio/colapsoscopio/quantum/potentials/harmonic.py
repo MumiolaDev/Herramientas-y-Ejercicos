@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import eval_hermite
 
-from colapsoscopio.potentials.base import Potential
+from colapsoscopio.quantum.potentials.base import Potential
 
 
 class HarmonicOscillator(Potential):
@@ -37,7 +37,7 @@ class HarmonicOscillator(Potential):
         para n grande sufre overflow de factorial); eval_hermite es estable
         para n moderado, que es el rango de interés aquí.
         """
-        from colapsoscopio.core.state import WaveFunction
+        from colapsoscopio.quantum.core.state import WaveFunction
 
         if n < 0:
             raise ValueError("n debe ser >= 0 (n=0 es el estado fundamental)")

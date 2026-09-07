@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 
 from colapsoscopio import Grid1D, Simulation, SimulationConfig
-from colapsoscopio.initial_conditions import GaussianPacket
-from colapsoscopio.potentials import HarmonicOscillator, InfiniteWell
+from colapsoscopio.quantum.initial_conditions import GaussianPacket
+from colapsoscopio.quantum.potentials import HarmonicOscillator, InfiniteWell
 
 
 def test_norma_se_conserva_en_pozo_infinito():

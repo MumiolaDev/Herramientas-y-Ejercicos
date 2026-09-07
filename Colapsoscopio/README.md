@@ -1,18 +1,46 @@
 # Colapsoscopio
 
-Un instrumento para *observar* la evolución temporal de funciones de onda:
-se especifica un potencial, una condición inicial y unos parámetros
-numéricos con una API de Python tipada (dataclasses), y la herramienta
-integra la ecuación de Schrödinger dependiente del tiempo (TDSE) y entrega
-la trayectoria Psi(x,t) lista para visualizar — con matplotlib (imagen
-estática o animación .gif) o directamente en la terminal, como "ASCII art"
-reproducible sin ninguna dependencia gráfica.
+Un instrumento para *observar* la evolución temporal de ondas: se especifica
+un medio (un potencial cuántico, por ahora), una condición inicial y unos
+parámetros numéricos con una API de Python tipada (dataclasses), y la
+herramienta integra la ecuación correspondiente y entrega la trayectoria
+lista para visualizar — con matplotlib (imagen estática o animación .gif) o
+directamente en la terminal, como "ASCII art" reproducible sin ninguna
+dependencia gráfica.
 
 El nombre juega con el "colapso" de la función de onda al medir, y el
 sufijo "-scopio" de todo instrumento de observación. Aquí no colapsamos
 nada de verdad — no hay medición, solo evolución unitaria — pero sí
-observamos: |Psi(x,t)|^2, Re/Im Psi, y los valores esperados <x>, <p>, <H>
-en función del tiempo.
+observamos: |Psi|², Re/Im Psi, y los valores esperados <x>, <p>, <H> en
+función del tiempo.
+
+## Dos dominios físicos, no uno
+
+El proyecto empezó siendo "la TDSE en 1D" y ahora cubre 1D + 2D cuánticos,
+con un segundo dominio (ondas clásicas: acústica, Maxwell) planeado como
+hermano — no como extensión del mismo código:
+
+```
+colapsoscopio/
+├── quantum/           # ecuación de Schrödinger dependiente del tiempo (1D, 2D)
+└── classical_waves/   # roadmap: ecuación de onda / Maxwell — FDTD, no split-operator
+```
+
+La razón de separarlos así, en vez de generalizar un único `Solver`, es
+física antes que de ingeniería: la TDSE es de **primer orden en el tiempo**
+y compleja — $i\hbar\,\partial_t\Psi = H\Psi$ —, y eso es justo lo que hace
+funcionar al split-operator ($e^{-iHt/\hbar}$ es unitario, conserva
+$\|\Psi\|^2$ exactamente). La ecuación de onda acústica
+($\partial_t^2 u = c^2\nabla^2 u$) y Maxwell son de **segundo orden en el
+tiempo**, reales (Maxwell además vectorial y acoplado E↔B): no existe un
+operador de evolución unitario análogo que aplicar ahí, lo que se conserva
+es energía del campo, no norma $L^2$ de una función de onda. El método
+estándar en ese mundo es FDTD (malla de Yee, leapfrog), no split-step
+Fourier. Forzar ambos bajo la misma abstracción rompería la que ya
+funciona en vez de extenderla; comparten la *filosofía* (separar
+malla/medio/condición-inicial/solver) pero no el código de bajo nivel.
+
+Este documento describe `quantum/`, que es lo que existe hoy.
 
 ## Por qué así (y no una colección de scripts sueltos)
 
@@ -23,24 +51,26 @@ ejercicio, pero no escala: agregar un potencial nuevo implica reescribir el
 integrador, y "eventualmente escalar a un átomo de hidrógeno" con ese
 enfoque significa empezar de cero.
 
-La apuesta de este proyecto es separar el problema en cuatro piezas
-ortogonales, cada una intercambiable sin tocar las demás:
+La apuesta de `quantum/` es separar el problema en cuatro piezas
+ortogonales, cada una intercambiable sin tocar las demás (los mismos cuatro
+nombres existen dos veces — sufijo `2D` — para el caso bidimensional):
 
-1. **Malla** (`core/grid.py`): dónde vive Psi y qué condición de frontera
-   tiene.
-2. **Potencial** (`potentials/`): qué es V(x). Solo necesita saber
+1. **Malla** (`core/grid.py`, `core/grid2d.py`): dónde vive Psi y qué
+   condición de frontera tiene.
+2. **Potencial** (`potentials/`): qué es V(x) o V(x,y). Solo necesita saber
    evaluarse a sí mismo; opcionalmente sabe construir sus autoestados
-   analíticos.
-3. **Condición inicial** (`initial_conditions/`): cómo es Psi(x,0).
+   analíticos (1D).
+3. **Condición inicial** (`initial_conditions/`): cómo es Psi en t=0.
 4. **Solver** (`solvers/`): cómo se avanza Psi un paso dt.
 
-`Simulation` los junta y corre la evolución; el resultado (`Trajectory`) es
-un array de numpy que no sabe nada de matplotlib ni de terminales — los
-backends de `visualization/` son consumidores de esa `Trajectory`, no
-partes del núcleo. Esta separación es la que permite que "agregar un
-sistema nuevo" sea agregar una clase `Potential`, no reescribir el
-integrador; y que "agregar hidrógeno" sea agregar una malla 3D/radial y un
-potencial de Coulomb, reutilizando el mismo solver conceptual.
+`Simulation`/`Simulation2D` los junta y corre la evolución; el resultado
+(`Trajectory`/`Trajectory2D`) es un array de numpy que no sabe nada de
+matplotlib ni de terminales — los backends de `visualization/` son
+consumidores de esa trayectoria, no partes del núcleo. Esta separación es
+la que permite que "agregar un sistema nuevo" sea agregar una clase
+`Potential`, no reescribir el integrador; y que "agregar hidrógeno" sea
+agregar una malla radial y un potencial de Coulomb, reutilizando el mismo
+solver conceptual.
 
 ## El método numérico: split-operator (split-step espectral)
 
@@ -76,12 +106,12 @@ diseño:
     impuesto por la propia base espectral, no aproximado con una pared de
     potencial "muy alta pero finita".
 
-  Escalar a un átomo de hidrógeno (roadmap) significa agregar una tercera
-  base espectral —una malla radial con la transformada apropiada para el
-  operador de Coulomb, o una malla 3D con FFT en las tres direcciones—
-  implementando la misma interfaz `transformar_ida`/`transformar_vuelta`
-  que ya usan `Hamiltonian1D` y `SplitStepSolver`. El solver no cambia una
-  línea.
+  `Grid2D` (periódica en ambos ejes, FFT2) es la misma idea en dos
+  dimensiones — ver la sección de la doble rendija más abajo — y escalar a
+  un átomo de hidrógeno (roadmap) significa agregar una tercera base
+  espectral —una malla radial con la transformada apropiada para el
+  operador de Coulomb— implementando la misma interfaz
+  `transformar_ida`/`transformar_vuelta`. El solver no cambia una línea.
 
 ## Validación
 
@@ -108,9 +138,9 @@ pip install -e .
 
 ```python
 from colapsoscopio import Grid1D, Simulation, SimulationConfig
-from colapsoscopio.initial_conditions import GaussianPacket
-from colapsoscopio.potentials import InfiniteWell
-from colapsoscopio.visualization import AsciiAnimator, MatplotlibAnimator
+from colapsoscopio.quantum.initial_conditions import GaussianPacket
+from colapsoscopio.quantum.potentials import InfiniteWell
+from colapsoscopio.quantum.visualization import AsciiAnimator, MatplotlibAnimator
 
 grid = Grid1D(x_min=0.0, x_max=20.0, n_points=512, boundary="dirichlet")
 config = SimulationConfig(
@@ -130,12 +160,18 @@ AsciiAnimator(traj).reproducir(fps=15)
 MatplotlibAnimator(traj).guardar("pozo.gif", fps=25)
 ```
 
+`Grid1D`, `WaveFunction`, `Hamiltonian1D`, `Simulation`, `SimulationConfig`,
+`Trajectory` y sus equivalentes `2D` se re-exportan desde `colapsoscopio`
+directamente; todo lo demás (`potentials`, `initial_conditions`,
+`solvers`, `visualization`) vive en `colapsoscopio.quantum.*`.
+
 ### Ejemplos ejecutables
 
 ```bash
 PYTHONPATH=. python3 examples/pozo_infinito.py        # paquete rebotando en las paredes
 PYTHONPATH=. python3 examples/oscilador_armonico.py   # paquete oscilando (estado casi-coherente)
 PYTHONPATH=. python3 examples/barrera_potencial.py    # efecto túnel: <E> < V0 y aun así transmite
+PYTHONPATH=. python3 examples/doble_rendija.py        # 2D: patrón de interferencia
 PYTHONPATH=. python3 examples/validar_autoestados.py  # chequeo de estacionariedad
 ```
 
@@ -168,21 +204,41 @@ promedio de `T(E)` sobre su propio espectro de energías, no `T(<E>)`.
 `tests/test_barrera.py` fija ese comportamiento como regresión (transmisión
 apreciable pero minoritaria, con la mayoría reflejada).
 
+## 2D: la doble rendija
+
+`Grid2D` + `Hamiltonian2D` + `SplitStepSolver2D` son la misma idea que la
+versión 1D con FFT2 en vez de FFT — ninguna idea nueva, la prueba de que el
+método no depende de la dimensión. `DoubleSlit` (`potentials/double_slit.py`)
+es una pantalla opaca con dos aberturas; `examples/doble_rendija.py` manda
+un paquete ancho en y (para iluminar ambas rendijas como un frente casi
+plano) y el resultado, del otro lado, es el patrón de interferencia
+clásico: un máximo central, un mínimo, un máximo secundario menor, no dos
+manchas separadas como predeciría la intuición de "pasa por una rendija u
+otra". `tests/test_2d.py` fija esa no-monotonía del perfil como regresión.
+
+Una sola trampa no obvia: la densidad transmitida/difractada es órdenes de
+magnitud más tenue que el pico del paquete incidente, todavía compacto —
+con una escala de color/intensidad *lineal* contra el máximo global, el
+patrón de interferencia (la parte interesante) queda invisible. Ambos
+backends 2D (`MatplotlibAnimator2D`, `AsciiAnimator2D`) comprimen el rango
+dinámico con `PowerNorm(gamma=0.4)` (el análogo del "stretch" no lineal que
+se usa para mostrar imágenes astronómicas de bajo brillo): sigue siendo una
+función monótona de la densidad real, solo que no lineal.
+
 ## Roadmap
 
 - **Más potenciales 1D**: pozo finito, doble pozo — cada uno es solo una
   clase `Potential` nueva; el solver no cambia.
-- **2D**: extender `Grid1D`/`Hamiltonian1D` a una malla 2D con FFT en ambos
-  ejes — útil para ilustrar difracción, potenciales tipo billar cuántico.
+- **Más potenciales/geometrías 2D**: billar cuántico (Dirichlet 2D, análogo
+  al pozo infinito 1D pero con DST en ambos ejes), rejilla de difracción de
+  N rendijas.
 - **Átomo de hidrógeno**: separar la parte angular (armónicos esféricos,
   exacta) de la radial u(r) = r·R(r), y resolver la TDSE radial con una
   base espectral adaptada al potencial de Coulomb (o una malla radial con
   Numerov/Crank-Nicolson si el split-operator no da un buen desempeño ahí).
-  El resto de la arquitectura (`Simulation`, `Trajectory`, los backends de
-  visualización) no debería necesitar cambios.
+- **`colapsoscopio.classical_waves/`**: ecuación de onda acústica y Maxwell
+  vía FDTD (malla de Yee, leapfrog) — dominio hermano, no extensión del
+  cuántico (ver la sección "Dos dominios físicos" más arriba para el porqué).
 - **Solvers alternativos**: Crank-Nicolson como segunda implementación de
-  `Solver`, útil como referencia cruzada independiente del split-operator.
-- **Backend ASCII interactivo**: hoy `AsciiAnimator.reproducir()` ya anima
-  en cualquier terminal; queda pendiente un modo con más de una fila
-  (perfil 2D real en vez de una sola sparkline) para cuando existan
-  visualizaciones 2D.
+  `Solver` (1D), útil como referencia cruzada independiente del
+  split-operator.

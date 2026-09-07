@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from colapsoscopio.potentials.base import Potential
+from colapsoscopio.quantum.potentials.base import Potential
 
 
 class PotentialBarrier(Potential):

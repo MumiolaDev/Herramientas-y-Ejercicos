@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from colapsoscopio.core.grid import Grid1D
+from colapsoscopio.quantum.core.grid import Grid1D
 
 
 @dataclass

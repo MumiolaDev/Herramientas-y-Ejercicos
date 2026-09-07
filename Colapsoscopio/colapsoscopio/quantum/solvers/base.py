@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from colapsoscopio.core.state import WaveFunction
+from colapsoscopio.quantum.core.state import WaveFunction
 
 
 class Solver(ABC):

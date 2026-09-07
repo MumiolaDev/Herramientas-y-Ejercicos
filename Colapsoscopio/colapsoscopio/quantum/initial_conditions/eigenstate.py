@@ -1,6 +1,6 @@
 """Condición inicial: arrancar exactamente en el n-ésimo autoestado del
 Hamiltoniano (solo disponible para potenciales "solubles", ver
-colapsoscopio.potentials.base.Potential.autoestado).
+colapsoscopio.quantum.potentials.base.Potential.autoestado).
 
 Es la condición inicial más útil para *validar* un solver: un autoestado
 estacionario solo debiera acumular una fase global e^{-i E_n t / hbar}, de
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from colapsoscopio.initial_conditions.base import InitialCondition
+from colapsoscopio.quantum.initial_conditions.base import InitialCondition
 
 
 @dataclass

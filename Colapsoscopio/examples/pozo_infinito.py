@@ -14,9 +14,9 @@ from __future__ import annotations
 import os
 
 from colapsoscopio import Grid1D, Simulation, SimulationConfig
-from colapsoscopio.initial_conditions import GaussianPacket
-from colapsoscopio.potentials import InfiniteWell
-from colapsoscopio.visualization import AsciiAnimator, MatplotlibAnimator
+from colapsoscopio.quantum.initial_conditions import GaussianPacket
+from colapsoscopio.quantum.potentials import InfiniteWell
+from colapsoscopio.quantum.visualization import AsciiAnimator, MatplotlibAnimator
 
 
 def main() -> None:

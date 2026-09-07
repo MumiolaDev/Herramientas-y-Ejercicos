@@ -16,7 +16,7 @@ import time
 
 import numpy as np
 
-from colapsoscopio.simulation import Trajectory
+from colapsoscopio.quantum.simulation import Trajectory
 
 BLOQUES_UNICODE = " ▁▂▃▄▅▆▇█"
 BLOQUES_ASCII = " .:-=+*#%@"

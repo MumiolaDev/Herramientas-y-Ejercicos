@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from colapsoscopio.potentials.base import Potential
+from colapsoscopio.quantum.potentials.base import Potential
 
 
 class InfiniteWell(Potential):
@@ -28,7 +28,7 @@ class InfiniteWell(Potential):
             Psi_n(x) = sqrt(2/L) sin(n*pi*(x - x_min)/L)
             E_n = n^2 pi^2 hbar^2 / (2 m L^2)
         """
-        from colapsoscopio.core.state import WaveFunction
+        from colapsoscopio.quantum.core.state import WaveFunction
 
         if grid.boundary != "dirichlet":
             raise ValueError(

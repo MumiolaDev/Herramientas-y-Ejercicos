@@ -16,9 +16,9 @@ from __future__ import annotations
 import os
 
 from colapsoscopio import Grid1D, Simulation, SimulationConfig
-from colapsoscopio.initial_conditions import GaussianPacket
-from colapsoscopio.potentials import HarmonicOscillator
-from colapsoscopio.visualization import AsciiAnimator, MatplotlibAnimator
+from colapsoscopio.quantum.initial_conditions import GaussianPacket
+from colapsoscopio.quantum.potentials import HarmonicOscillator
+from colapsoscopio.quantum.visualization import AsciiAnimator, MatplotlibAnimator
 
 
 def main() -> None:

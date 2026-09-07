@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from colapsoscopio.initial_conditions.base import InitialCondition
+from colapsoscopio.quantum.initial_conditions.base import InitialCondition
 
 
 @dataclass
@@ -22,7 +22,7 @@ class GaussianPacket(InitialCondition):
     hacia +x, negativo hacia -x, cero = en reposo (dispersión pura)."""
 
     def construir(self, grid, potential, hbar: float, mass: float):
-        from colapsoscopio.core.state import WaveFunction
+        from colapsoscopio.quantum.core.state import WaveFunction
 
         envolvente = (2 * np.pi * self.sigma**2) ** (-0.25) * np.exp(
             -((grid.x - self.x0) ** 2) / (4 * self.sigma**2)

@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from colapsoscopio.core.hamiltonian import Hamiltonian1D
-from colapsoscopio.core.state import WaveFunction
-from colapsoscopio.solvers.base import Solver
+from colapsoscopio.quantum.core.hamiltonian import Hamiltonian1D
+from colapsoscopio.quantum.core.state import WaveFunction
+from colapsoscopio.quantum.solvers.base import Solver
 
 
 class SplitStepSolver(Solver):

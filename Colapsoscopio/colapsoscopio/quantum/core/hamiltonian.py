@@ -14,8 +14,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from colapsoscopio.core.grid import Grid1D
-from colapsoscopio.potentials.base import Potential
+from colapsoscopio.quantum.core.grid import Grid1D
+from colapsoscopio.quantum.potentials.base import Potential
 
 
 @dataclass
@@ -35,7 +35,7 @@ class Hamiltonian1D:
 
     def valor_esperado_energia(self, psi) -> float:
         """<H> = <T> + <V>, calculado por separado en cada representación."""
-        from colapsoscopio.core.state import WaveFunction
+        from colapsoscopio.quantum.core.state import WaveFunction
 
         assert isinstance(psi, WaveFunction)
         psi_k = self.grid.transformar_ida(psi.psi)

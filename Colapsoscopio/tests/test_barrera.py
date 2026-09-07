@@ -13,8 +13,8 @@ from __future__ import annotations
 import pytest
 
 from colapsoscopio import Grid1D, Simulation, SimulationConfig
-from colapsoscopio.initial_conditions import GaussianPacket
-from colapsoscopio.potentials import PotentialBarrier
+from colapsoscopio.quantum.initial_conditions import GaussianPacket
+from colapsoscopio.quantum.potentials import PotentialBarrier
 
 
 def _simular_barrera(n_steps=6000, guardar_cada=100):

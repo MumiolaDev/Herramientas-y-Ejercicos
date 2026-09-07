@@ -1,7 +1,4 @@
-"""Orquestador: junta malla + potencial + condición inicial + solver, corre
-la evolución temporal y devuelve una Trajectory lista para visualizar o
-para verificar en un test.
-"""
+"""Orquestador 2D — análogo a simulation.py (1D), ver ese docstring."""
 
 from __future__ import annotations
 
@@ -9,29 +6,25 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from colapsoscopio.core.grid import Grid1D
-from colapsoscopio.core.hamiltonian import Hamiltonian1D
-from colapsoscopio.core.state import WaveFunction
-from colapsoscopio.initial_conditions.base import InitialCondition
-from colapsoscopio.potentials.base import Potential
-from colapsoscopio.solvers.base import Solver
-from colapsoscopio.solvers.split_step import SplitStepSolver
+from colapsoscopio.quantum.core.grid2d import Grid2D
+from colapsoscopio.quantum.core.hamiltonian2d import Hamiltonian2D
+from colapsoscopio.quantum.core.state2d import WaveFunction2D
+from colapsoscopio.quantum.initial_conditions.gaussian_packet_2d import GaussianPacket2D
+from colapsoscopio.quantum.potentials.base2d import Potential2D
+from colapsoscopio.quantum.solvers.split_step_2d import SplitStepSolver2D
 
 
 @dataclass
-class SimulationConfig:
-    grid: Grid1D
-    potential: Potential
-    initial_condition: InitialCondition
+class SimulationConfig2D:
+    grid: Grid2D
+    potential: Potential2D
+    initial_condition: GaussianPacket2D
     dt: float
     n_steps: int
     hbar: float = 1.0
     mass: float = 1.0
     guardar_cada: int = 1
-    """Subsampleo: 1 = guarda todos los pasos, N = guarda 1 de cada N (útil
-    cuando dt debe ser muy chico por estabilidad pero graficar cada paso
-    sería redundante)."""
-    solver_factory: type[Solver] = field(default=SplitStepSolver)
+    solver_factory: type = field(default=SplitStepSolver2D)
 
     def __post_init__(self) -> None:
         if self.dt <= 0:
@@ -43,18 +36,14 @@ class SimulationConfig:
 
 
 @dataclass
-class Trajectory:
-    """Resultado de una simulación: Psi(x,t) en los tiempos guardados, más
-    los observables ya reducidos a series de tiempo (evita recalcularlos
-    para cada frame de una animación).
-    """
-
-    grid: Grid1D
+class Trajectory2D:
+    grid: Grid2D
     tiempos: np.ndarray  # shape (n_snapshots,)
-    estados: np.ndarray  # complejo, shape (n_snapshots, n_points)
-    norma: np.ndarray  # shape (n_snapshots,)
-    energia: np.ndarray  # shape (n_snapshots,)
-    x_esperado: np.ndarray  # shape (n_snapshots,)
+    estados: np.ndarray  # complejo, shape (n_snapshots, n_x, n_y)
+    norma: np.ndarray
+    energia: np.ndarray
+    x_esperado: np.ndarray
+    y_esperado: np.ndarray
     hbar: float = 1.0
     mass: float = 1.0
 
@@ -63,38 +52,39 @@ class Trajectory:
         return len(self.tiempos)
 
     def densidad(self, i: int) -> np.ndarray:
-        """|Psi(x, t_i)|^2."""
         return np.abs(self.estados[i]) ** 2
 
-    def estado_en(self, i: int) -> WaveFunction:
-        return WaveFunction(self.grid, self.estados[i])
+    def estado_en(self, i: int) -> WaveFunction2D:
+        return WaveFunction2D(self.grid, self.estados[i])
 
 
-class Simulation:
-    def __init__(self, config: SimulationConfig):
+class Simulation2D:
+    def __init__(self, config: SimulationConfig2D):
         self.config = config
-        self.hamiltonian = Hamiltonian1D(
+        self.hamiltonian = Hamiltonian2D(
             grid=config.grid, potential=config.potential, hbar=config.hbar, mass=config.mass
         )
         self.solver = config.solver_factory(self.hamiltonian)
 
-    def run(self) -> Trajectory:
+    def run(self) -> Trajectory2D:
         cfg = self.config
         psi = cfg.initial_condition.construir(cfg.grid, cfg.potential, cfg.hbar, cfg.mass)
 
         n_snapshots = cfg.n_steps // cfg.guardar_cada + 1
-        estados = np.empty((n_snapshots, cfg.grid.n_points), dtype=complex)
+        estados = np.empty((n_snapshots, cfg.grid.n_x, cfg.grid.n_y), dtype=complex)
         tiempos = np.empty(n_snapshots)
         norma = np.empty(n_snapshots)
         energia = np.empty(n_snapshots)
         x_esperado = np.empty(n_snapshots)
+        y_esperado = np.empty(n_snapshots)
 
-        def registrar(idx: int, t: float, psi: WaveFunction) -> None:
+        def registrar(idx: int, t: float, psi: WaveFunction2D) -> None:
             estados[idx] = psi.psi
             tiempos[idx] = t
             norma[idx] = psi.norma()
             energia[idx] = self.hamiltonian.valor_esperado_energia(psi)
             x_esperado[idx] = psi.valor_esperado_x()
+            y_esperado[idx] = psi.valor_esperado_y()
 
         registrar(0, 0.0, psi)
         idx = 1
@@ -106,13 +96,14 @@ class Simulation:
                 registrar(idx, t, psi)
                 idx += 1
 
-        return Trajectory(
+        return Trajectory2D(
             grid=cfg.grid,
             tiempos=tiempos,
             estados=estados,
             norma=norma,
             energia=energia,
             x_esperado=x_esperado,
+            y_esperado=y_esperado,
             hbar=cfg.hbar,
             mass=cfg.mass,
         )
