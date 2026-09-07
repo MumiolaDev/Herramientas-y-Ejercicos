@@ -172,6 +172,7 @@ PYTHONPATH=. python3 examples/pozo_infinito.py        # paquete rebotando en las
 PYTHONPATH=. python3 examples/oscilador_armonico.py   # paquete oscilando (estado casi-coherente)
 PYTHONPATH=. python3 examples/barrera_potencial.py    # efecto túnel: <E> < V0 y aun así transmite
 PYTHONPATH=. python3 examples/doble_rendija.py        # 2D: patrón de interferencia
+PYTHONPATH=. python3 examples/billar_cuantico.py       # 2D: billar de Sinai, ergodicidad cuántica
 PYTHONPATH=. python3 examples/validar_autoestados.py  # chequeo de estacionariedad
 ```
 
@@ -258,13 +259,54 @@ simulación de difracción, no solo esta:
   (Crank-Nicolson, roadmap) no tendría ese límite en `dt`, a cambio de
   resolver un sistema lineal en cada paso en vez de una FFT.
 
+## 2D: el billar cuántico (Sinai)
+
+`Grid2D` gana el mismo segundo "sabor" de frontera que `Grid1D`:
+`boundary="dirichlet"`, vía `scipy.fft.dstn`/`idstn` (DST-I en ambos ejes,
+separable porque -∇² con Dirichlet en un rectángulo se diagonaliza en el
+producto tensorial de las bases seno 1D de cada eje). `EmptyBilliard`
+(billar rectangular vacío) es, otra vez, el único potencial 2D con
+autoestados analíticos —producto de dos senos, uno por eje, exactamente
+como el pozo infinito 1D pero separable en dos dimensiones— y por eso sirve
+para la misma validación fuerte: arrancar en un autoestado (n,m) y
+comprobar que |Psi|² queda estacionaria a precisión de máquina, con la
+energía numérica exacta (ver `tests/test_billar.py`).
+
+`SinaiBilliard` agrega un disco de potencial alto al centro del mismo
+billar — el ejemplo canónico de billar caóticamente disperso: a diferencia
+del rectángulo vacío (integrable, separable), la trayectoria clásica que
+rebota contra el disco central es sensible a condiciones iniciales. Sin
+autoestado analítico posible ahí, la validación es la de siempre
+(conservación de norma/energía) más un chequeo físico directo: la densidad
+dentro del disco debe quedar consistentemente despreciable, porque V ahí es
+alto (`test_densidad_dentro_del_obstaculo_permanece_despreciable`).
+
+`examples/billar_cuantico.py` lanza un paquete desde una esquina hacia el
+disco. El resultado no es una "bolita" rebotando limpiamente varias veces:
+tras chocar y difractarse alrededor del disco, y rebotar un par de veces
+contra las paredes, la densidad desarrolla un patrón de **moteado
+(speckle) irregular** que llena la cavidad de forma aproximadamente
+uniforme — la firma cuántica de la ergodicidad clásica del billar de Sinai
+(conjetura de Berry: los autoestados de alta energía de un sistema
+clásicamente caótico se comportan localmente como una superposición de
+ondas planas con fases aleatorias). Es un resultado más interesante que
+forzar una apariencia de trayectoria clásica, y es lo que en realidad hace
+interesantes a los billares cuánticos como objeto de estudio.
+
+Una nota de rendimiento específica de este método: `dstn`/`idstn` usan
+internamente una FFT de tamaño ~2(N+1) por eje, así que el tamaño de la
+malla importa para el costo de una forma que no es solo "más puntos = más
+lento" — un tamaño con `N+1` mal factorizado (p. ej. `N=510`, `N+1=511=7×73`)
+midió ~57 ms/paso en este proyecto, contra ~25 ms/paso en un tamaño vecino
+con `N+1=512=2⁹` y casi los mismos puntos. `examples/billar_cuantico.py`
+usa `N=383` (`N+1=384=2⁷×3`) por esta razón, documentada ahí mismo.
+
 ## Roadmap
 
 - **Más potenciales 1D**: pozo finito, doble pozo — cada uno es solo una
   clase `Potential` nueva; el solver no cambia.
-- **Más potenciales/geometrías 2D**: billar cuántico (Dirichlet 2D, análogo
-  al pozo infinito 1D pero con DST en ambos ejes), rejilla de difracción de
-  N rendijas.
+- **Más potenciales/geometrías 2D**: billar de Bunimovich (estadio, otra
+  geometría caótica clásica), rejilla de difracción de N rendijas.
 - **Átomo de hidrógeno**: separar la parte angular (armónicos esféricos,
   exacta) de la radial u(r) = r·R(r), y resolver la TDSE radial con una
   base espectral adaptada al potencial de Coulomb (o una malla radial con
