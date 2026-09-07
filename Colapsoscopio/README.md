@@ -216,14 +216,47 @@ clásico: un máximo central, un mínimo, un máximo secundario menor, no dos
 manchas separadas como predeciría la intuición de "pasa por una rendija u
 otra". `tests/test_2d.py` fija esa no-monotonía del perfil como regresión.
 
-Una sola trampa no obvia: la densidad transmitida/difractada es órdenes de
-magnitud más tenue que el pico del paquete incidente, todavía compacto —
-con una escala de color/intensidad *lineal* contra el máximo global, el
-patrón de interferencia (la parte interesante) queda invisible. Ambos
-backends 2D (`MatplotlibAnimator2D`, `AsciiAnimator2D`) comprimen el rango
-dinámico con `PowerNorm(gamma=0.4)` (el análogo del "stretch" no lineal que
-se usa para mostrar imágenes astronómicas de bajo brillo): sigue siendo una
-función monótona de la densidad real, solo que no lineal.
+Dos trampas no obvias, ambas de las que conviene desconfiar en cualquier
+simulación de difracción, no solo esta:
+
+- **Rango dinámico de color**: la densidad transmitida/difractada es
+  órdenes de magnitud más tenue que el pico del paquete incidente, todavía
+  compacto — con una escala de color/intensidad *lineal* contra el máximo
+  global, el patrón de interferencia (la parte interesante) queda
+  invisible. Ambos backends 2D (`MatplotlibAnimator2D`, `AsciiAnimator2D`)
+  comprimen el rango dinámico con `PowerNorm(gamma=0.4)` (el análogo del
+  "stretch" no lineal que se usa para mostrar imágenes astronómicas de bajo
+  brillo): sigue siendo una función monótona de la densidad real, solo que
+  no lineal.
+
+- **Campo cercano vs. campo lejano**: un patrón de doble rendija cortado
+  *demasiado cerca* de la pantalla no muestra el patrón de interferencia de
+  libro (varias franjas nítidas) sino una mancha con un único mínimo
+  tenue. La escala que separa ambos regímenes es la **distancia de
+  Rayleigh**, $L_R \sim d^2/\lambda$ (d = separación entre rendijas,
+  λ = 2π/k₀ la longitud de onda de De Broglie del paquete): por debajo de
+  $L_R$ se está en campo cercano (Fresnel), y hace falta propagar varias
+  veces $L_R$ para entrar en campo lejano (Fraunhofer), donde el patrón
+  sale limpio. Los parámetros de `examples/doble_rendija.py` (d=4, k₀=4,
+  observado hasta x=25, con $L_R\approx10.2$) están calibrados para eso.
+
+  Esto tiene una consecuencia de costo computacional real, no solo
+  estética: observar en campo lejano exige un dominio más grande (más
+  distancia que recorrer) y, para resolverlo con detalle, una malla más
+  fina — y el costo del split-operator no escala linealmente con la
+  resolución. El criterio de estabilidad exige $dt \sim dx^2$ (la fase
+  cinética no puede aliasear), así que duplicar la resolución espacial
+  no solo dobla los puntos de la malla: también *cuadruplica* el número de
+  pasos necesarios para el mismo tiempo físico. Combinado con el costo
+  $O(N\log N)$ de cada FFT2, el costo total escala aproximadamente como
+  $t_{\text{total}} \cdot dx^{-4}\log(dx^{-2})$ — medido en este proyecto,
+  pasar de una malla exploratoria (350×300) a la de alta fidelidad que usa
+  `examples/doble_rendija.py` (875×750, campo lejano completo) es
+  ~40× más caro (segundos vs. minutos), consistente con esa cuarta
+  potencia. Es el precio de que el término cinético sea espectralmente
+  exacto (sin error de truncamiento ahí): un esquema implícito
+  (Crank-Nicolson, roadmap) no tendría ese límite en `dt`, a cambio de
+  resolver un sistema lineal en cada paso en vez de una FFT.
 
 ## Roadmap
 
