@@ -299,7 +299,23 @@ malla importa para el costo de una forma que no es solo "más puntos = más
 lento" — un tamaño con `N+1` mal factorizado (p. ej. `N=510`, `N+1=511=7×73`)
 midió ~57 ms/paso en este proyecto, contra ~25 ms/paso en un tamaño vecino
 con `N+1=512=2⁹` y casi los mismos puntos. `examples/billar_cuantico.py`
-usa `N=383` (`N+1=384=2⁷×3`) por esta razón, documentada ahí mismo.
+usa `N=383` (`N+1=384=2⁷×3`) por esta razón, documentada ahí mismo — malla
+de 383×383, 18750 pasos, ~199 s de cómputo real medido en este proyecto,
+norma conservada a 10 decimales.
+
+Un matiz honesto que vale la pena dejar por escrito: `V0_obstaculo` en el
+ejemplo es alto (300) pero no infinito, y con la energía del paquete
+(⟨E⟩≈31.5) no despreciable frente a esa altura, la probabilidad *dentro*
+del disco no es exactamente cero en ningún instante — llega a ~0.35% en el
+cuadro final de la corrida completa (t≈2.8, después del choque y varios
+rebotes). Es penetración evanescente real de la función de onda dentro de
+una barrera finita (la misma física que en `PotentialBarrier` 1D), no un
+error numérico ni una fuga de probabilidad. `tests/test_billar.py` verifica
+la misma tendencia en una ventana bastante más corta y barata de correr
+(t≈0.3, antes de que el paquete termine de interactuar con el disco), donde
+mide hasta ~0.044% — cualitativamente el mismo fenómeno (crece con el
+tiempo de interacción), con un umbral (`< 1e-3`) que dejó margen de sobra
+para esa ventana corta, no una réplica exacta del run completo.
 
 ## Roadmap
 
