@@ -1,12 +1,13 @@
 # Caoscopio
 
 Un instrumento para *observar* sistemas dinámicos en el espacio de fases
-— caóticos y no caóticos. Se especifica un sistema (por ahora, péndulo
-simple o péndulo doble), una condición inicial y unos parámetros
-numéricos con una API de Python tipada (dataclasses), y la herramienta
-integra las ecuaciones de movimiento y entrega la trayectoria lista para
-visualizar: la animación física (el péndulo moviéndose) y su retrato de
-fases, lado a lado.
+— caóticos y no caóticos. Se especifica un sistema (péndulo simple,
+péndulo doble, o péndulo forzado y amortiguado), una condición inicial y
+unos parámetros numéricos con una API de Python tipada (dataclasses), y
+la herramienta integra las ecuaciones de movimiento y entrega la
+trayectoria lista para visualizar: la animación física (el péndulo
+moviéndose), su retrato de fases, y — para el sistema forzado — el campo
+vectorial y la sección de Poincaré que revelan sus atractores.
 
 Hermano conceptual de [`Colapsoscopio`](../Colapsoscopio) (mismo repo,
 dominio distinto): allá se integra la ecuación de Schrödinger con un
@@ -83,6 +84,45 @@ son autoconsistentes (una `energia()` con el mismo error que
 - **Período del péndulo simple** (`test_periodo_converge_a_pequenas_oscilaciones`):
   para amplitud pequeña, el período numérico converge a T=2π√(l/g).
 
+## Atractores: el péndulo forzado y amortiguado
+
+Los dos péndulos de arriba son **conservativos**: la energía mecánica ni
+se crea ni se destruye, y por el teorema de Liouville el volumen del
+espacio de fases tampoco — dos trayectorias con condiciones iniciales
+distintas nunca convergen entre sí. Eso significa que un sistema
+Hamiltoniano, por más caótico que sea, **no puede tener un atractor**: no
+hay ningún conjunto hacia el que "caigan" trayectorias arbitrarias.
+
+`DrivenDampedPendulum` rompe esa conservación a propósito:
+θ''+bθ'+(g/l)sinθ=A cos(ω_d t). El término -bθ' disipa energía, A cos(ω_d t)
+la repone — la combinación contrae el volumen del espacio de fases, y *eso*
+es lo que hace posible un atractor. No siendo conservativo, no tiene
+`energia()` (ver el docstring de `systems/driven_pendulum.py`), así que la
+validación es distinta:
+
+- **Sin forzado, amplitud pequeña** (`test_decaimiento_subamortiguado_sin_forzado_coincide_con_solucion_analitica`):
+  se reduce al oscilador armónico amortiguado clásico, con solución
+  cerrada conocida — coincide a 2×10⁻⁵.
+- **El atractor es independiente de la condición inicial**
+  (`test_atractor_periodico_es_independiente_de_la_condicion_inicial`):
+  con A=0.9, cuatro condiciones iniciales bien distintas convergen al
+  *mismo* punto en la sección de Poincaré estroboscópica (una muestra por
+  período de forzado) — verificado antes de escribir el test, no solo
+  citado: las cuatro coinciden a 5 cifras significativas.
+- **El régimen caótico no colapsa** (`test_atractor_caotico_no_colapsa_a_un_punto`):
+  con A=1.15 (parámetro tomado de un ejemplo muy citado en la literatura
+  de ecuaciones diferenciales: θ''+0.5θ'+sinθ=A cos(2t/3)), la sección de
+  Poincaré tiene dispersión apreciable — un **atractor extraño**: acotado,
+  con estructura fina, pero sin colapsar a un punto ni a una curva simple.
+
+`examples/pendulo_forzado_atractor.py` dibuja ambos regímenes: el campo
+vectorial congelado a la fase de forzado t≡0 (mod T_d — la misma fase en
+la que se muestrea la sección de Poincaré, para que campo y puntos
+correspondan al mismo instante del ciclo), y seis condiciones iniciales
+"cayendo" hacia el atractor. En A=0.9 las seis espiralan hacia el mismo
+punto; en A=1.15 llenan la misma región con estructura de capas — la
+firma visual de un atractor extraño.
+
 ## Instalación
 
 ```bash
@@ -119,6 +159,7 @@ PYTHONPATH=. python3 examples/pendulo_simple.py             # no caótico: retra
 PYTHONPATH=. python3 examples/pendulo_doble_regular.py      # caótico en potencia, energía baja: regular
 PYTHONPATH=. python3 examples/pendulo_doble_caotico.py      # energía alta: caos de verdad
 PYTHONPATH=. python3 examples/pendulo_doble_sensibilidad.py # dos condiciones iniciales casi iguales, divergiendo
+PYTHONPATH=. python3 examples/pendulo_forzado_atractor.py   # campo vectorial + atractores: ciclo límite vs. extraño
 ```
 
 (`PYTHONPATH=.` no es necesario si se instaló el paquete con `pip install -e .`)
@@ -140,14 +181,20 @@ pytest
   (hoy solo grafica |Δθ₁(t)|) — pide renormalizar periódicamente la
   separación entre las dos trayectorias y promediar su tasa de
   crecimiento, no solo medir la separación cruda.
-- **Sección de Poincaré**: cortar la trayectoria del péndulo doble cada
-  vez que θ1 cruza un valor fijo y graficar (θ2,ω2) en esos instantes —
-  la forma estándar de ver la estructura fina entre el régimen regular y
-  el caótico (toros KAM sobreviviendo, islas de regularidad).
-- **Más sistemas**: péndulo forzado y amortiguado (no conservativo — el
-  primer sistema sin `energia()`), oscilador de Duffing, atractor de
-  Lorenz (3D, requiere generalizar el panel físico o reemplazarlo por
-  una proyección).
+- **Sección de Poincaré para el péndulo doble**: distinto del caso ya
+  implementado (que muestrea estroboscópicamente a la frecuencia de un
+  forzado externo) — para un sistema autónomo como el péndulo doble, la
+  sección se define cortando la trayectoria cada vez que θ1 cruza un
+  valor fijo (p. ej. θ1=0, ω1>0) y graficando (θ2,ω2) en esos instantes,
+  a energía fija. Es la forma estándar de ver la estructura fina entre el
+  régimen regular y el caótico en un sistema Hamiltoniano de 2 grados de
+  libertad (toros KAM sobreviviendo, islas de regularidad en medio del
+  mar caótico) — complementario al campo vectorial + atractor del péndulo
+  forzado, que muestra la otra cara: qué pasa cuando el sistema deja de
+  ser conservativo.
+- **Más sistemas**: oscilador de Duffing (otro clásico con atractor
+  extraño, doble pozo en vez de péndulo), atractor de Lorenz (3D, requiere
+  generalizar el panel físico o reemplazarlo por una proyección).
 - **Integrador simpléctico** opcional, si la deriva de energía de RK4
   llega a ser un problema real para alguna trayectoria de interés (ver
   "El integrador" arriba).

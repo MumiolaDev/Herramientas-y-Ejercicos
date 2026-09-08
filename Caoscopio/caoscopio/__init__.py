@@ -13,6 +13,7 @@ cambia lo que "validar el solver" significa de un proyecto al otro.
 from caoscopio.core.trajectory import Simulation, SimulationConfig, Trajectory
 from caoscopio.systems.simple_pendulum import SimplePendulum
 from caoscopio.systems.double_pendulum import DoublePendulum
+from caoscopio.systems.driven_pendulum import DrivenDampedPendulum
 
 __all__ = [
     "Simulation",
@@ -20,4 +21,5 @@ __all__ = [
     "Trajectory",
     "SimplePendulum",
     "DoublePendulum",
+    "DrivenDampedPendulum",
 ]
