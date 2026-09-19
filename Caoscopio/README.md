@@ -160,6 +160,7 @@ PYTHONPATH=. python3 examples/pendulo_doble_regular.py      # caótico en potenc
 PYTHONPATH=. python3 examples/pendulo_doble_caotico.py      # energía alta: caos de verdad
 PYTHONPATH=. python3 examples/pendulo_doble_sensibilidad.py # dos condiciones iniciales casi iguales, divergiendo
 PYTHONPATH=. python3 examples/pendulo_forzado_atractor.py   # campo vectorial + atractores: ciclo límite vs. extraño
+PYTHONPATH=. python3 examples/lorenz_mariposa.py             # 3D: la mariposa de Lorenz, sensibilidad extrema
 ```
 
 (`PYTHONPATH=.` no es necesario si se instaló el paquete con `pip install -e .`)
@@ -174,13 +175,57 @@ de energía.
 pytest
 ```
 
+## El atractor de Lorenz: el primer sistema en 3D, y el primero que no es un péndulo
+
+`Lorenz` (ẋ=σ(y-x), ẏ=x(ρ-z)-y, ż=xy-βz) es una simplificación drástica
+de la convección atmosférica que Lorenz publicó en 1963 — sin ángulo, sin
+gravedad, el primer sistema del proyecto que no es un péndulo. Con los
+parámetros clásicos (σ=10, ρ=28, β=8/3) es caótico y disipativo, y su
+atractor extraño es la "mariposa" más reconocible de la teoría del caos
+(el propio Lorenz acuñó la metáfora del "efecto mariposa" hablando de este
+sistema, en una charla de 1972).
+
+Dos validaciones independientes, ninguna apoyada en "hacia dónde parece
+que converge":
+
+- **Puntos fijos exactos** (`test_puntos_fijos_son_equilibrios_exactos`):
+  para ρ>1 hay tres equilibrios cerrados en forma analítica —el origen y
+  el par simétrico C±=(±√(β(ρ-1)), ±√(β(ρ-1)), ρ-1)— y evaluar
+  `derivadas()` ahí debe dar cero exactamente. Es una prueba algebraica
+  directa.
+- **Contracción de volumen a la tasa exacta**
+  (`test_tasa_de_contraccion_de_volumen_coincide_con_la_divergencia_teorica`):
+  la divergencia del campo, ∇·f=-σ-1-β, es *constante* en todo el espacio
+  de fases — así que un volumen infinitesimal se contrae exactamente como
+  e^{(-σ-1-β)t}. Se verifica integrando un tetraedro de cuatro puntos
+  infinitesimalmente cercanos y comparando la tasa de decaimiento de su
+  volumen contra la fórmula: coinciden a 0.1%. Es el análogo, en un
+  sistema disipativo, de "energía conservada" en uno Hamiltoniano — salvo
+  que acá lo que se predice de antemano no es que algo se conserve, sino
+  exactamente a qué tasa se contrae.
+
+Un detalle honesto que vale la pena dejar anotado, no pulido:
+`examples/lorenz_mariposa.py` grafica la separación entre dos
+trayectorias con Δx₀=10⁻⁵. La expectativa naive —crecimiento exponencial
+limpio desde t=0— no es lo que se observa: la separación se queda casi
+plana (oscilando entre 10⁻⁵ y 2×10⁻⁵) durante los primeros ~12 segundos,
+y solo despega con claridad después. No es un error: una perturbación
+inicial arbitraria rara vez está alineada con la dirección de máxima
+expansión del atractor (el "vector de Lyapunov" dominante) — hace falta
+un tiempo de relajación para que la dinámica la realinee, antes de que la
+tasa de crecimiento se estabilice en el exponente de Lyapunov máximo.
+Es exactamente el tipo de matiz que este proyecto prefiere medir y
+mostrar, no asumir.
+
 ## Roadmap
 
 - **Exponente de Lyapunov**: cuantificar la tasa exponencial de
-  divergencia que ya se ve en `examples/pendulo_doble_sensibilidad.py`
-  (hoy solo grafica |Δθ₁(t)|) — pide renormalizar periódicamente la
-  separación entre las dos trayectorias y promediar su tasa de
-  crecimiento, no solo medir la separación cruda.
+  divergencia que ya se ve en `examples/pendulo_doble_sensibilidad.py` y
+  `examples/lorenz_mariposa.py` (hoy ambos solo grafican |Δ(t)|) — pide
+  renormalizar periódicamente la separación entre las dos trayectorias y
+  promediar su tasa de crecimiento, no solo medir la separación cruda (y,
+  visto el matiz de arriba, descartar el tramo inicial de realineamiento
+  antes de promediar).
 - **Sección de Poincaré para el péndulo doble**: distinto del caso ya
   implementado (que muestrea estroboscópicamente a la frecuencia de un
   forzado externo) — para un sistema autónomo como el péndulo doble, la
@@ -193,8 +238,7 @@ pytest
   forzado, que muestra la otra cara: qué pasa cuando el sistema deja de
   ser conservativo.
 - **Más sistemas**: oscilador de Duffing (otro clásico con atractor
-  extraño, doble pozo en vez de péndulo), atractor de Lorenz (3D, requiere
-  generalizar el panel físico o reemplazarlo por una proyección).
+  extraño, doble pozo en vez de péndulo).
 - **Integrador simpléctico** opcional, si la deriva de energía de RK4
   llega a ser un problema real para alguna trayectoria de interés (ver
   "El integrador" arriba).

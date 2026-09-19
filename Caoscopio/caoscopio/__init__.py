@@ -14,6 +14,7 @@ from caoscopio.core.trajectory import Simulation, SimulationConfig, Trajectory
 from caoscopio.systems.simple_pendulum import SimplePendulum
 from caoscopio.systems.double_pendulum import DoublePendulum
 from caoscopio.systems.driven_pendulum import DrivenDampedPendulum
+from caoscopio.systems.lorenz import Lorenz
 
 __all__ = [
     "Simulation",
@@ -22,4 +23,5 @@ __all__ = [
     "SimplePendulum",
     "DoublePendulum",
     "DrivenDampedPendulum",
+    "Lorenz",
 ]
