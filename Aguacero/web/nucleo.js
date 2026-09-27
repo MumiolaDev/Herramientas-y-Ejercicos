@@ -1,0 +1,348 @@
+// Aguacero — el mismo paso de tiempo que aguacero/nucleo_numba.py, en
+// JavaScript, para correr en el navegador (web/plantilla.html) o en node
+// (tests/test_web_vs_numpy.py lo compara contra la referencia numpy).
+//
+// Si cambias la física, cámbiala en los tres motores: numpy, numba y este.
+
+(function (raiz) {
+  "use strict";
+
+  const EX = [0, 1, 0, -1, 0, 1, -1, -1, 1];
+  const EY = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+  const W = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+  const OP = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+
+  function presion(rho, T, a, b, R) {
+    const x = (b * rho) / 4.0;
+    const d = 1.0 - x;
+    return (rho * R * T * (1.0 + x + x * x - x * x * x)) / (d * d * d) - a * rho * rho;
+  }
+
+  function dpdT(rho, b, R) {
+    const x = (b * rho) / 4.0;
+    const d = 1.0 - x;
+    return (rho * R * (1.0 + x + x * x - x * x * x)) / (d * d * d);
+  }
+
+  function psiDe(rho, T, a, b, R) {
+    const exceso = presion(rho, T, a, b, R) - rho / 3.0;
+    return Math.sqrt(Math.max(-6.0 * exceso, 0.0));
+  }
+
+  function crearMundo(ancho, alto, p) {
+    // p: {tau, gravedad, sigma_li, chi, mojabilidad, T0, Tmin, Tmax,
+    //     rhoVapor, rhoLiquido, a, b, R, cv, isotermico, marco}
+    const nx = ancho, ny = alto, N = nx * ny;
+    const m = {
+      nx, ny, N, p,
+      f: new Float64Array(9 * N), fn: new Float64Array(9 * N),
+      rho: new Float64Array(N), ux: new Float64Array(N), uy: new Float64Array(N),
+      psi: new Float64Array(N), T: new Float64Array(N),
+      solido: new Uint8Array(N), fuente: new Uint8Array(N), Tfuente: new Float64Array(N),
+      pasos: 0, masaAgregada: 0,
+      // temporales de la ecuación de energía
+      _gx: new Float64Array(N), _gy: new Float64Array(N), _div: new Float64Array(N),
+      _T0: new Float64Array(N), _T1: new Float64Array(N), _k1: new Float64Array(N),
+      _k2: new Float64Array(N), _tmp: new Float64Array(N), _rs: new Float64Array(N),
+    };
+    m.T.fill(p.T0);
+    m.Tfuente.fill(p.T0);
+    if (p.marco !== false) {
+      for (let x = 0; x < nx; x++) { m.solido[x] = 1; m.solido[(ny - 1) * nx + x] = 1; }
+      for (let y = 0; y < ny; y++) { m.solido[y * nx] = 1; m.solido[y * nx + nx - 1] = 1; }
+    }
+    for (let k = 0; k < N; k++) ponerEquilibrio(m, k, p.rhoVapor, 0, 0);
+    for (let k = 0; k < N; k++) m.rho[k] = p.rhoVapor;
+    return m;
+  }
+
+  function ponerEquilibrio(m, k, r, u, v) {
+    const u2 = u * u + v * v;
+    for (let i = 0; i < 9; i++) {
+      const eu = EX[i] * u + EY[i] * v;
+      m.f[i * m.N + k] = W[i] * r * (1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * u2);
+    }
+  }
+
+  function psiPared(m) {
+    const p = m.p;
+    const rp = p.rhoVapor + p.mojabilidad * (p.rhoLiquido - p.rhoVapor);
+    return psiDe(rp, p.T0, p.a, p.b, p.R);
+  }
+
+  function pasoFluido(m) {
+    const { nx, ny, N, f, fn, rho, ux, uy, psi, T, solido, p } = m;
+    const tau = p.tau, g = p.gravedad, sig = p.sigma_li;
+    const pw = psiPared(m);
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const k = y * nx + x;
+        let r = 0.0;
+        for (let i = 0; i < 9; i++) r += f[i * N + k];
+        rho[k] = r;
+        if (solido[k]) psi[k] = pw;
+        else {
+          const Tp = Math.min(Math.max(T[k], p.Tmin), p.Tmax);
+          const exceso = presion(r, Tp, p.a, p.b, p.R) - r / 3.0;
+          psi[k] = Math.sqrt(Math.max(-6.0 * exceso, 0.0));
+        }
+      }
+    }
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const k = y * nx + x;
+        if (solido[k]) {
+          ux[k] = 0.0; uy[k] = 0.0;
+          for (let i = 0; i < 9; i++) {
+            const d = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
+            fn[i * N + d] = f[i * N + k];
+          }
+          continue;
+        }
+        let sx = 0.0, sy = 0.0;
+        for (let i = 1; i < 9; i++) {
+          const v = psi[((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx)];
+          sx += W[i] * v * EX[i];
+          sy += W[i] * v * EY[i];
+        }
+        const r = rho[k];
+        const Fxc = psi[k] * sx, Fyc = psi[k] * sy;
+        const Fx = Fxc, Fy = Fyc + r * g;
+        const Q = (sig * (Fxc * Fxc + Fyc * Fyc)) / (Math.max(psi[k] * psi[k], 1e-30) * tau);
+        let jx = 0.0, jy = 0.0;
+        for (let i = 0; i < 9; i++) { jx += f[i * N + k] * EX[i]; jy += f[i * N + k] * EY[i]; }
+        const u = (jx + 0.5 * Fx) / r, v = (jy + 0.5 * Fy) / r;
+        ux[k] = u; uy[k] = v;
+        const u2 = u * u + v * v;
+        for (let i = 0; i < 9; i++) {
+          const eu = EX[i] * u + EY[i] * v;
+          const feq = W[i] * r * (1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * u2);
+          const s = (1.0 - 0.5 / tau) * W[i] *
+            (3.0 * ((EX[i] - u) * Fx + (EY[i] - v) * Fy) + 9.0 * eu * (EX[i] * Fx + EY[i] * Fy));
+          const cli = 3.0 * Q * W[i] * (3.0 * (EX[i] * EX[i] + EY[i] * EY[i]) - 2.0);
+          const d = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
+          fn[i * N + d] = f[i * N + k] - (f[i * N + k] - feq) / tau + s + cli;
+        }
+      }
+    }
+    const tmp = new Float64Array(9);
+    for (let k = 0; k < N; k++) {
+      if (!solido[k]) continue;
+      for (let i = 0; i < 9; i++) tmp[i] = fn[OP[i] * N + k];
+      for (let i = 0; i < 9; i++) fn[i * N + k] = tmp[i];
+    }
+    m.f = fn; m.fn = f;
+  }
+
+  function gradiente(m, campo, gx, gy) {
+    const { nx, ny } = m;
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        let sx = 0.0, sy = 0.0;
+        for (let i = 1; i < 9; i++) {
+          const v = campo[((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx)];
+          sx += W[i] * v * EX[i];
+          sy += W[i] * v * EY[i];
+        }
+        gx[y * nx + x] = 3.0 * sx;
+        gy[y * nx + x] = 3.0 * sy;
+      }
+    }
+  }
+
+  function rellenar(m, T, salida) {
+    const { nx, ny, solido, fuente } = m;
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const k = y * nx + x;
+        if (!solido[k] || fuente[k]) { salida[k] = T[k]; continue; }
+        let suma = 0.0, cuenta = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dy === 0 && dx === 0) continue;
+            const kk = ((y + dy + ny) % ny) * nx + ((x + dx + nx) % nx);
+            if (!solido[kk]) { suma += T[kk]; cuenta++; }
+          }
+        }
+        salida[k] = cuenta > 0 ? suma / cuenta : T[k];
+      }
+    }
+  }
+
+  function ladoDerecho(m, T, salida) {
+    const { nx, ny, solido, fuente, ux, uy, p } = m;
+    const rs = m._rs, div = m._div;
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const k = y * nx + x;
+        if (solido[k]) { salida[k] = 0.0; continue; }
+        const tc = T[k], uxc = ux[k], uyc = uy[k];
+        let adv = 0.0;
+        if (uxc > 0.0) adv -= uxc * (tc - T[y * nx + ((x - 1 + nx) % nx)]);
+        else adv -= uxc * (T[y * nx + ((x + 1) % nx)] - tc);
+        if (uyc > 0.0) adv -= uyc * (tc - T[((y - 1 + ny) % ny) * nx + x]);
+        else adv -= uyc * (T[((y + 1) % ny) * nx + x] - tc);
+        let flujo = 0.0;
+        for (let i = 1; i < 5; i++) {
+          const kk = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
+          const condK = !solido[k] || fuente[k];
+          const condV = !solido[kk] || fuente[kk];
+          if (condK && condV) {
+            const rc = !solido[kk] ? (2.0 * rs[k] * rs[kk]) / (rs[k] + rs[kk]) : rs[k];
+            flujo += rc * (T[kk] - tc);
+          }
+        }
+        const dif = (p.chi * flujo) / rs[k];
+        const comp = (-tc * dpdT(rs[k], p.b, p.R)) / (rs[k] * p.cv) * div[k];
+        salida[k] = adv + dif + comp;
+      }
+    }
+  }
+
+  function pasoTemperatura(m) {
+    const { N, solido, fuente, Tfuente, rho } = m;
+    for (let k = 0; k < N; k++) m._rs[k] = solido[k] ? 0.1 : rho[k];
+    gradiente(m, m.ux, m._gx, m._gy);
+    for (let k = 0; k < N; k++) m._div[k] = m._gx[k];
+    gradiente(m, m.uy, m._gx, m._gy);
+    for (let k = 0; k < N; k++) m._div[k] += m._gy[k];
+
+    for (let k = 0; k < N; k++) m._tmp[k] = fuente[k] ? Tfuente[k] : m.T[k];
+    rellenar(m, m._tmp, m._T0);
+    ladoDerecho(m, m._T0, m._k1);
+    for (let k = 0; k < N; k++) m._tmp[k] = m._T0[k] + m._k1[k];
+    rellenar(m, m._tmp, m._T1);
+    ladoDerecho(m, m._T1, m._k2);
+    for (let k = 0; k < N; k++) m.T[k] = m._T0[k] + 0.5 * (m._k1[k] + m._k2[k]);
+  }
+
+  function paso(m, n) {
+    const total = n === undefined ? 1 : n;
+    for (let s = 0; s < total; s++) {
+      pasoFluido(m);
+      if (!m.p.isotermico) pasoTemperatura(m);
+      m.pasos++;
+    }
+  }
+
+  // ------------------------------------------------------------ herramientas
+
+  // desenfoque gaussiano separable, idéntico a scipy.ndimage.gaussian_filter
+  // (sigma=1.2, truncate=4 → radio 5, mode="nearest")
+  const RADIO_G = 5;
+  const KERNEL_G = (function () {
+    const s = 1.2, k = [];
+    let tot = 0;
+    for (let i = -RADIO_G; i <= RADIO_G; i++) { const w = Math.exp(-0.5 * (i * i) / (s * s)); k.push(w); tot += w; }
+    return k.map((w) => w / tot);
+  })();
+
+  function suavizar(m, mascara) {
+    const { nx, ny, N } = m;
+    const a = new Float64Array(N), b = new Float64Array(N);
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        let s = 0.0;
+        for (let j = -RADIO_G; j <= RADIO_G; j++) {
+          const yy = Math.min(Math.max(y + j, 0), ny - 1);
+          s += KERNEL_G[j + RADIO_G] * mascara[yy * nx + x];
+        }
+        a[y * nx + x] = s;
+      }
+    }
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        let s = 0.0;
+        for (let j = -RADIO_G; j <= RADIO_G; j++) {
+          const xx = Math.min(Math.max(x + j, 0), nx - 1);
+          s += KERNEL_G[j + RADIO_G] * a[y * nx + xx];
+        }
+        b[y * nx + x] = s;
+      }
+    }
+    return b;
+  }
+
+  function masaEn(m, k) {
+    let r = 0.0;
+    for (let i = 0; i < 9; i++) r += m.f[i * m.N + k];
+    return r;
+  }
+
+  function agregarLiquido(m, mascara, u, v, Tred) {
+    const p = m.p;
+    const phi = suavizar(m, mascara);
+    // cota de las celdas que el borde suavizado puede tocar
+    for (let k = 0; k < m.N; k++) {
+      if (m.solido[k] || phi[k] <= 0.02) continue;
+      const rn = p.rhoVapor + (p.rhoLiquido - p.rhoVapor) * Math.min(Math.max(phi[k], 0), 1);
+      const antes = masaEn(m, k);
+      if (!(rn > antes + 1e-9)) continue;
+      ponerEquilibrio(m, k, rn, u || 0, v || 0);
+      m.masaAgregada += masaEn(m, k) - antes;
+      if (Tred !== undefined && Tred !== null) m.T[k] = Tred * p.Tc;
+    }
+  }
+
+  function quitarLiquido(m, mascara) {
+    for (let k = 0; k < m.N; k++) {
+      if (!mascara[k] || m.solido[k]) continue;
+      const antes = masaEn(m, k);
+      ponerEquilibrio(m, k, m.p.rhoVapor, 0, 0);
+      m.masaAgregada += masaEn(m, k) - antes;
+    }
+  }
+
+  function agregarPared(m, mascara) {
+    for (let k = 0; k < m.N; k++) if (mascara[k]) m.solido[k] = 1;
+  }
+
+  function quitarPared(m, mascara) {
+    const { nx, ny } = m;
+    for (let y = 1; y < ny - 1; y++) {
+      for (let x = 1; x < nx - 1; x++) {
+        const k = y * nx + x;
+        if (!mascara[k] || !m.solido[k]) continue;
+        m.solido[k] = 0; m.fuente[k] = 0; m.T[k] = m.p.T0;
+        const antes = masaEn(m, k);
+        ponerEquilibrio(m, k, m.p.rhoVapor, 0, 0);
+        m.masaAgregada += masaEn(m, k) - antes;
+      }
+    }
+  }
+
+  function agregarFuente(m, mascara, Tred) {
+    const T = Tred * m.p.Tc;
+    for (let k = 0; k < m.N; k++) {
+      if (!mascara[k]) continue;
+      m.solido[k] = 1; m.fuente[k] = 1; m.Tfuente[k] = T; m.T[k] = T;
+    }
+  }
+
+  // ------------------------------------------------------------ observables
+
+  function observables(m) {
+    const { N, nx, ny, rho, ux, uy, T, solido, p } = m;
+    let masa = 0.0;
+    for (let k = 0; k < 9 * N; k++) masa += m.f[k];
+    let cin = 0, pot = 0, int = 0, Tliq = 0, nliq = 0;
+    const umbral = 0.5 * (p.rhoLiquido + p.rhoVapor);
+    for (let y = 0; y < ny; y++) {
+      const h = ny - 1 - y;
+      for (let x = 0; x < nx; x++) {
+        const k = y * nx + x;
+        if (solido[k]) continue;
+        const r = rho[k];
+        cin += 0.5 * r * (ux[k] * ux[k] + uy[k] * uy[k]);
+        pot += r * p.gravedad * h;
+        int += r * p.cv * T[k] - p.a * r * r;
+        if (r > umbral) { Tliq += T[k]; nliq++; }
+      }
+    }
+    return { masa, cinetica: cin, potencial: pot, interna: int, total: cin + pot + int, Tliq: nliq ? Tliq / nliq / p.Tc : NaN, pixelesLiquido: nliq };
+  }
+
+  const api = { crearMundo, paso, agregarLiquido, quitarLiquido, agregarPared, quitarPared, agregarFuente, observables, presion, ponerEquilibrio };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else raiz.Aguacero = api;
+})(typeof self !== "undefined" ? self : this);

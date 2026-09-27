@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aguacero"
+version = "0.1.0"
+description = "Autómata de fluido pixel a pixel (lattice Boltzmann pseudopotencial) con agua que cae, se evapora y hierve: temperatura, presión y energía con ecuación de estado real"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "pygame>=2.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+rapido = ["numba>=0.58"]
+
+[tool.setuptools.packages.find]
+include = ["aguacero*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
