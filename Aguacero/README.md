@@ -27,6 +27,11 @@ python -m aguacero gota --escala 5
 | `+` `−` | pasos de simulación por cuadro |
 | `G` `R` `S` `H` | gravedad on/off · reiniciar · captura PNG · ayuda |
 
+Versión de navegador (sin instalar nada, también en el celular):
+`python web/construir.py salidas/aguacero.html` arma una página
+autocontenida con el mismo paso traducido a JavaScript (~120 pasos/s en
+un escritorio, ~3× más lento que numba).
+
 El panel lateral muestra masa total (y cuánta agregaron las
 herramientas), energías cinética/potencial/interna, T media del líquido,
 y una **sonda del pixel bajo el cursor**: ρ, T/T_c, p/p_c, |u| y fase.
@@ -273,6 +278,8 @@ aguacero/
   visor.py         visor/editor interactivo en pygame (python -m aguacero)
 web/
   nucleo.js        el paso en JavaScript (navegador y node)
+  plantilla.html   la página: lienzo, pinceles, lecturas y sonda por pixel
+  construir.py     inyecta nucleo.js + parámetros calculados en Python → HTML autocontenido
   validar_node.js  puente para el test contra numpy
 examples/
   diagrama_de_fases.py   coexistencia simulada vs. Maxwell (la figura de arriba)

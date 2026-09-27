@@ -1,0 +1,387 @@
+<title>Aguacero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --fondo: #eaeff1;
+    --superficie: #f7f9fa;
+    --tinta: #13202a;
+    --tinta-suave: #52636f;
+    --linea: #c7d2d8;
+    --acento: #1b6fb5;
+    --acento-tinta: #ffffff;
+    --calor: #d4532a;
+    --frio: #2e9cd1;
+    --lienzo: #0e1a22;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --fondo: #0c1317;
+      --superficie: #131d23;
+      --tinta: #dce6ea;
+      --tinta-suave: #8ea2ad;
+      --linea: #243640;
+      --acento: #5aaae6;
+      --acento-tinta: #06121b;
+      --calor: #ef7a52;
+      --frio: #62c0ec;
+      --lienzo: #081015;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --fondo: #0c1317;
+    --superficie: #131d23;
+    --tinta: #dce6ea;
+    --tinta-suave: #8ea2ad;
+    --linea: #243640;
+    --acento: #5aaae6;
+    --acento-tinta: #06121b;
+    --calor: #ef7a52;
+    --frio: #62c0ec;
+    --lienzo: #081015;
+  }
+  html, body { background: var(--fondo); color: var(--tinta); }
+  body { font-family: var(--sans); font-size: 14px; line-height: 1.45; padding: 0 16px; }
+  .marco { max-width: 1180px; margin: 0 auto; padding-block: 20px 36px; display: grid; gap: 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+  h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  header p { margin: 0; color: var(--tinta-suave); max-width: 70ch; text-wrap: balance; }
+  .area { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+  @media (max-width: 880px) { .area { grid-template-columns: minmax(0, 1fr); } }
+  .barra { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; }
+  .grupo { display: inline-flex; border: 1px solid var(--linea); border-radius: 6px; overflow: hidden; background: var(--superficie); }
+  .grupo button { font: 500 13px var(--sans); color: var(--tinta); background: transparent; border: 0; padding: 7px 11px; cursor: pointer; border-right: 1px solid var(--linea); }
+  .grupo button:last-child { border-right: 0; }
+  .grupo button[aria-pressed="true"] { background: var(--acento); color: var(--acento-tinta); }
+  .grupo button:focus-visible, .solo:focus-visible, input:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+  .solo { font: 500 13px var(--sans); color: var(--tinta); background: var(--superficie); border: 1px solid var(--linea); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  .solo[aria-pressed="true"] { border-color: var(--acento); color: var(--acento); }
+  .lienzo { position: relative; background: var(--lienzo); border-radius: 6px; overflow: hidden; }
+  canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
+  .escala { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-top: 8px; font: 12px var(--mono); color: var(--tinta-suave); }
+  .escala canvas { aspect-ratio: auto; height: 10px; border-radius: 2px; cursor: default; }
+  .nota { margin: 6px 0 0; font-size: 12.5px; color: var(--tinta-suave); }
+  aside { display: grid; gap: 14px; background: var(--superficie); border: 1px solid var(--linea); border-radius: 8px; padding: 14px; }
+  aside h2 { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-suave); margin: 0 0 6px; }
+  .pinceles { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .pinceles button { padding: 7px 0; font-size: 12px; }
+  .punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+  label.fila { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; align-items: center; }
+  label.fila input { grid-column: 1 / -1; width: 100%; accent-color: var(--acento); }
+  label.fila output { font: 12.5px var(--mono); color: var(--tinta-suave); }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 0; font-size: 13px; }
+  dt { color: var(--tinta-suave); }
+  dd { margin: 0; font: 12.5px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .sub { padding-left: 10px; }
+  details { border-top: 1px solid var(--linea); padding-top: 10px; }
+  summary { cursor: pointer; font-weight: 500; }
+  .explica { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .explica div { font-size: 13px; color: var(--tinta-suave); max-width: 65ch; }
+  .explica b { color: var(--tinta); font-weight: 600; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="marco">
+  <header>
+    <h1>Aguacero</h1>
+    <p>Un autómata celular de fluido: cada pixel guarda densidad, velocidad y temperatura, y el agua cae, moja, se evapora y hierve según una ecuación de estado real. Pinta sobre la simulación con el mouse o el dedo.</p>
+  </header>
+
+  <div class="area">
+    <section>
+      <div class="barra">
+        <div class="grupo" role="group" aria-label="Escena" id="escenas">
+          <button type="button" data-escena="grifo" aria-pressed="true">Grifo</button>
+          <button type="button" data-escena="gota" aria-pressed="false">Gota</button>
+          <button type="button" data-escena="tetera" aria-pressed="false">Tetera</button>
+        </div>
+        <div class="grupo" role="group" aria-label="Campo mostrado" id="vistas">
+          <button type="button" data-vista="agua" aria-pressed="true">Agua</button>
+          <button type="button" data-vista="temperatura" aria-pressed="false">Temperatura</button>
+          <button type="button" data-vista="presion" aria-pressed="false">Presión</button>
+          <button type="button" data-vista="rapidez" aria-pressed="false">Rapidez</button>
+        </div>
+        <button type="button" class="solo" id="pausa" aria-pressed="false">Pausar</button>
+        <button type="button" class="solo" id="reiniciar">Reiniciar</button>
+      </div>
+      <div class="lienzo"><canvas id="sim" width="200" height="150" aria-label="Simulación: clic o arrastre para pintar con el pincel activo"></canvas></div>
+      <div class="escala" aria-hidden="true"><span id="esc-min"></span><canvas id="barra-color" width="256" height="1"></canvas><span id="esc-max"></span></div>
+      <p class="nota" id="nota-vista"></p>
+    </section>
+
+    <aside>
+      <div>
+        <h2>Pincel</h2>
+        <div class="grupo pinceles" role="group" aria-label="Pincel" id="pinceles">
+          <button type="button" data-pincel="agua" aria-pressed="true">Agua</button>
+          <button type="button" data-pincel="pared" aria-pressed="false">Pared</button>
+          <button type="button" data-pincel="borrar" aria-pressed="false">Borrar</button>
+          <button type="button" data-pincel="calentar" aria-pressed="false"><span class="punto" style="background: var(--calor)"></span>Calor</button>
+          <button type="button" data-pincel="enfriar" aria-pressed="false"><span class="punto" style="background: var(--frio)"></span>Frío</button>
+        </div>
+      </div>
+      <label class="fila" for="radio">Radio del pincel <output id="radio-v">4 px</output><input type="range" id="radio" min="1" max="15" value="4"></label>
+      <label class="fila" for="velocidad">Pasos por cuadro <output id="velocidad-v">8</output><input type="range" id="velocidad" min="1" max="32" value="8"></label>
+      <button type="button" class="solo" id="gravedad" aria-pressed="true">Gravedad: activa</button>
+
+      <div>
+        <h2>Estado</h2>
+        <dl>
+          <dt>Paso</dt><dd id="o-paso">0</dd>
+          <dt>Pasos por segundo</dt><dd id="o-ritmo">–</dd>
+          <dt>Masa total Σf</dt><dd id="o-masa">–</dd>
+          <dt class="sub">agregada con pinceles</dt><dd id="o-agregada">–</dd>
+          <dt>Energía cinética</dt><dd id="o-cin">–</dd>
+          <dt>Energía potencial</dt><dd id="o-pot">–</dd>
+          <dt>Energía interna</dt><dd id="o-int">–</dd>
+          <dt>T media del líquido</dt><dd id="o-tliq">–</dd>
+        </dl>
+      </div>
+      <div>
+        <h2>Pixel bajo el cursor</h2>
+        <dl id="sonda">
+          <dt>Posición</dt><dd id="s-pos">–</dd>
+          <dt>Fase</dt><dd id="s-fase">–</dd>
+          <dt>Densidad ρ</dt><dd id="s-rho">–</dd>
+          <dt>Temperatura</dt><dd id="s-T">–</dd>
+          <dt>Presión</dt><dd id="s-p">–</dd>
+          <dt>Rapidez |u|</dt><dd id="s-u">–</dd>
+        </dl>
+      </div>
+    </aside>
+  </div>
+
+  <div class="explica">
+    <div><b>Qué es cada pixel.</b> Una celda de lattice Boltzmann D2Q9: nueve poblaciones de partículas que chocan y viajan a los 8 vecinos. Líquido y vapor no están marcados: salen del lazo de van der Waals de la ecuación de Carnahan-Starling, así que la tensión superficial y las gotas emergen solas.</div>
+    <div><b>Temperatura con consecuencias.</b> T tiene su propia ecuación de energía con trabajo de compresión: al evaporarse el fluido se enfría (calor latente sin ponerlo a mano), y como T entra en la ecuación de estado, sobre la placa caliente el líquido hierve.</div>
+    <div><b>Escala.</b> Temperatura en unidades de T<sub>c</sub>; la escena corre a 0.7 T<sub>c</sub>. La longitud capilar medida es ~19 pixeles, así que un pixel equivale a ~0.14 mm de agua: son gotas milimétricas, dominadas por capilaridad.</div>
+    <div><b>Mismo motor que en Python.</b> Este paso es una traducción del núcleo de <code>Aguacero/</code> y un test lo compara contra la referencia numpy en node: coinciden a 10<sup>−12</sup> después de 300 pasos. En el navegador corre a ~120 pasos por segundo en un computador de escritorio; el visor pygame con numba va unas 3 veces más rápido.</div>
+  </div>
+</div>
+
+<script>
+/*__NUCLEO__*/
+</script>
+<script>
+(function () {
+  "use strict";
+  const DATOS = /*__DATOS__*/;
+  const A = window.Aguacero;
+  const P = DATOS.parametros;
+  const NX = DATOS.ancho, NY = DATOS.alto, N = NX * NY;
+  const Tc = P.Tc;
+
+  const lienzo = document.getElementById("sim");
+  const ctx = lienzo.getContext("2d");
+  const imagen = ctx.createImageData(NX, NY);
+
+  let m, cadaPaso = null, nombreEscena = "grifo";
+  let vista = "agua", pincel = "agua", radio = 4, pasosPorCuadro = 8;
+  let pausado = false, gravedadGuardada = P.gravedad;
+  const reducirMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function mascara(prueba) {
+    const k = new Uint8Array(N);
+    for (let y = 0; y < NY; y++) for (let x = 0; x < NX; x++) if (prueba(y, x)) k[y * NX + x] = 1;
+    return k;
+  }
+
+  const ESCENAS = {
+    gota() {
+      A.agregarLiquido(m, mascara((y) => y > NY - 25));
+      A.agregarLiquido(m, mascara((y, x) => Math.hypot(x - NX / 2, y - NY * 0.3) < 11));
+      return null;
+    },
+    grifo() {
+      A.agregarPared(m, mascara((y, x) => y >= 55 && y < 58 && x > 15 && x < 95));
+      A.agregarPared(m, mascara((y, x) => y >= 95 && y < 98 && x > 80 && x < 170));
+      A.agregarPared(m, mascara((y, x) => y > NY - 40 && x >= 120 && x < 123));
+      const boca = mascara((y, x) => y >= 12 && y < 17 && x >= 40 && x < 47);
+      return (mm) => { if (mm.pasos % 3 === 0) A.agregarLiquido(mm, boca, 0, 0.06); };
+    },
+    tetera() {
+      A.agregarLiquido(m, mascara((y) => y > NY - 45));
+      A.agregarFuente(m, mascara((y, x) => y === NY - 2 && x > NX * 0.3 && x < NX * 0.7), 1.1);
+      A.agregarFuente(m, mascara((y, x) => y === 1 && x > 1 && x < NX - 2), 0.8);
+      return null;
+    },
+  };
+
+  function cargar(nombre) {
+    nombreEscena = nombre;
+    const p = Object.assign({}, P, { gravedad: m ? m.p.gravedad : P.gravedad });
+    m = A.crearMundo(NX, NY, p);
+    cadaPaso = ESCENAS[nombre]();
+    avanzar(1);
+    marcar("escenas", "escena", nombre);
+  }
+
+  function avanzar(n) {
+    for (let s = 0; s < n; s++) {
+      if (cadaPaso) cadaPaso(m);
+      A.paso(m, 1);
+    }
+  }
+
+  // ---------------------------------------------------------------- color
+  const LUT = DATOS.luts;
+  const PARED = [70, 72, 80], CALOR = [224, 88, 46], FRIO = [60, 170, 230];
+  const VISTAS = {
+    agua: { lut: "Blues", min: "vapor", max: "líquido", nota: "Fracción de líquido: (ρ − ρ_vapor)/(ρ_líquido − ρ_vapor), con las densidades de coexistencia a 0.7 T_c." },
+    temperatura: { lut: "inferno", min: "0.55 T_c", max: "1.20 T_c", nota: "Temperatura local. Mira el líquido que se enfría al evaporarse y el penacho caliente que sube de la placa." },
+    presion: { lut: "viridis", min: "baja", max: "alta", nota: "Presión termodinámica p(ρ, T) de Carnahan-Starling, relativa a la presión de vapor; compresión logística para ver a la vez el vapor y el fondo de la piscina." },
+    rapidez: { lut: "magma", min: "0", max: "0.12 c", nota: "Rapidez |u| en unidades de red (c = Δx/Δt). Lattice Boltzmann exige |u| ≪ 0.58; las corrientes débiles en el vapor junto a las paredes son el artefacto clásico del pseudopotencial." },
+  };
+
+  const pVapor = A.presion(P.rhoVapor, P.T0, P.a, P.b, P.R);
+  const pCrit = A.presion(P.rhoCritica, Tc, P.a, P.b, P.R);
+
+  function pintarLienzo() {
+    const d = imagen.data, lut = LUT[VISTAS[vista].lut];
+    const rho = m.rho, T = m.T, ux = m.ux, uy = m.uy;
+    const drho = P.rhoLiquido - P.rhoVapor;
+    for (let k = 0; k < N; k++) {
+      let c;
+      if (m.solido[k]) {
+        c = m.fuente[k] ? (m.Tfuente[k] > P.T0 ? CALOR : FRIO) : PARED;
+        d[4 * k] = c[0]; d[4 * k + 1] = c[1]; d[4 * k + 2] = c[2]; d[4 * k + 3] = 255;
+        continue;
+      }
+      let x;
+      if (vista === "agua") x = 0.08 + 0.92 * Math.min(Math.max((rho[k] - P.rhoVapor) / drho, 0), 1);
+      else if (vista === "temperatura") x = (T[k] / Tc - 0.55) / 0.65;
+      else if (vista === "presion") {
+        const pk = A.presion(rho[k], T[k], P.a, P.b, P.R);
+        x = 0.5 + 0.5 * Math.tanh((pk - pVapor) / (3 * Math.abs(pVapor) + 1e-12));
+      } else x = Math.hypot(ux[k], uy[k]) / 0.12;
+      const i = 3 * Math.round(Math.min(Math.max(x, 0), 1) * 255);
+      d[4 * k] = lut[i]; d[4 * k + 1] = lut[i + 1]; d[4 * k + 2] = lut[i + 2]; d[4 * k + 3] = 255;
+    }
+    ctx.putImageData(imagen, 0, 0);
+  }
+
+  function pintarEscala() {
+    const c = document.getElementById("barra-color");
+    const cx = c.getContext("2d"), img = cx.createImageData(256, 1), lut = LUT[VISTAS[vista].lut];
+    for (let i = 0; i < 256; i++) { img.data[4 * i] = lut[3 * i]; img.data[4 * i + 1] = lut[3 * i + 1]; img.data[4 * i + 2] = lut[3 * i + 2]; img.data[4 * i + 3] = 255; }
+    cx.putImageData(img, 0, 0);
+    document.getElementById("esc-min").textContent = VISTAS[vista].min;
+    document.getElementById("esc-max").textContent = VISTAS[vista].max;
+    document.getElementById("nota-vista").textContent = VISTAS[vista].nota;
+  }
+
+  // ------------------------------------------------------------ lecturas
+  const fmt = (v, n) => (Number.isFinite(v) ? v.toFixed(n) : "–");
+  const $ = (id) => document.getElementById(id);
+  let sonda = null;
+
+  function actualizarLecturas(ritmo) {
+    const o = A.observables(m);
+    $("o-paso").textContent = m.pasos.toLocaleString("es-CL");
+    $("o-ritmo").textContent = ritmo ? Math.round(ritmo).toString() : "–";
+    $("o-masa").textContent = fmt(o.masa, 3);
+    $("o-agregada").textContent = fmt(m.masaAgregada, 3);
+    $("o-cin").textContent = fmt(o.cinetica, 4);
+    $("o-pot").textContent = fmt(o.potencial, 3);
+    $("o-int").textContent = fmt(o.interna, 2);
+    $("o-tliq").textContent = o.pixelesLiquido ? fmt(o.Tliq, 3) + " T_c" : "sin líquido";
+    if (!sonda) return;
+    const k = sonda.y * NX + sonda.x;
+    $("s-pos").textContent = `(${sonda.x}, ${sonda.y})`;
+    if (m.solido[k]) {
+      $("s-fase").textContent = m.fuente[k] ? "fuente térmica" : "pared";
+      $("s-rho").textContent = "–";
+      $("s-T").textContent = m.fuente[k] ? fmt(m.Tfuente[k] / Tc, 3) + " T_c" : "–";
+      $("s-p").textContent = "–"; $("s-u").textContent = "–";
+      return;
+    }
+    const r = m.rho[k];
+    $("s-fase").textContent = r > 0.5 * (P.rhoLiquido + P.rhoVapor) ? "líquido" : "vapor";
+    $("s-rho").textContent = fmt(r, 4);
+    $("s-T").textContent = fmt(m.T[k] / Tc, 3) + " T_c";
+    $("s-p").textContent = (A.presion(r, m.T[k], P.a, P.b, P.R) / pCrit >= 0 ? "+" : "") + fmt(A.presion(r, m.T[k], P.a, P.b, P.R) / pCrit, 3) + " p_c";
+    $("s-u").textContent = fmt(Math.hypot(m.ux[k], m.uy[k]), 4);
+  }
+
+  // -------------------------------------------------------------- pincel
+  function celda(ev) {
+    const r = lienzo.getBoundingClientRect();
+    const x = Math.floor(((ev.clientX - r.left) / r.width) * NX);
+    const y = Math.floor(((ev.clientY - r.top) / r.height) * NY);
+    return x >= 0 && x < NX && y >= 0 && y < NY ? { x, y } : null;
+  }
+
+  function aplicar(c, borrar) {
+    const mk = mascara((y, x) => (y - c.y) ** 2 + (x - c.x) ** 2 <= radio * radio);
+    const h = borrar ? "borrar" : pincel;
+    if (h === "agua") A.agregarLiquido(m, mk);
+    else if (h === "pared") A.agregarPared(m, mk);
+    else if (h === "borrar") { A.quitarPared(m, mk); A.quitarLiquido(m, mk); }
+    else if (h === "calentar") A.agregarFuente(m, mk, 1.15);
+    else if (h === "enfriar") A.agregarFuente(m, mk, 0.62);
+  }
+
+  let pintando = false, borrando = false;
+  lienzo.addEventListener("contextmenu", (e) => e.preventDefault());
+  lienzo.addEventListener("pointerdown", (e) => {
+    pintando = true; borrando = e.button === 2;
+    lienzo.setPointerCapture(e.pointerId);
+    const c = celda(e); if (c) { sonda = c; aplicar(c, borrando); if (pausado) redibujar(); }
+  });
+  lienzo.addEventListener("pointermove", (e) => {
+    const c = celda(e); if (!c) return;
+    sonda = c;
+    if (pintando) { aplicar(c, borrando); if (pausado) redibujar(); }
+    else if (pausado) actualizarLecturas(0);
+  });
+  const soltar = () => { pintando = false; };
+  lienzo.addEventListener("pointerup", soltar);
+  lienzo.addEventListener("pointercancel", soltar);
+
+  // ------------------------------------------------------------ controles
+  function marcar(grupo, attr, valor) {
+    document.querySelectorAll(`#${grupo} button`).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === valor)));
+  }
+  $("escenas").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { cargar(b.dataset.escena); redibujar(); } });
+  $("vistas").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; vista = b.dataset.vista; marcar("vistas", "vista", vista); pintarEscala(); pintarLienzo(); });
+  $("pinceles").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; pincel = b.dataset.pincel; marcar("pinceles", "pincel", pincel); });
+  $("radio").addEventListener("input", (e) => { radio = +e.target.value; $("radio-v").textContent = radio + " px"; });
+  $("velocidad").addEventListener("input", (e) => { pasosPorCuadro = +e.target.value; $("velocidad-v").textContent = String(pasosPorCuadro); });
+  $("pausa").addEventListener("click", () => { pausado = !pausado; $("pausa").setAttribute("aria-pressed", String(pausado)); $("pausa").textContent = pausado ? "Continuar" : "Pausar"; });
+  $("reiniciar").addEventListener("click", () => { cargar(nombreEscena); redibujar(); });
+  $("gravedad").addEventListener("click", () => {
+    if (m.p.gravedad) { gravedadGuardada = m.p.gravedad; m.p.gravedad = 0; } else m.p.gravedad = gravedadGuardada;
+    const on = m.p.gravedad !== 0;
+    $("gravedad").setAttribute("aria-pressed", String(on));
+    $("gravedad").textContent = on ? "Gravedad: activa" : "Gravedad: apagada";
+  });
+
+  function redibujar() { pintarLienzo(); actualizarLecturas(0); }
+
+  // --------------------------------------------------------------- bucle
+  let tRef = performance.now(), pasosRef = 0, ritmo = 0, ultimaLectura = 0;
+  function cuadro(t) {
+    if (!pausado) avanzar(pasosPorCuadro);
+    pintarLienzo();
+    if (t - tRef > 600) { ritmo = ((m.pasos - pasosRef) * 1000) / (t - tRef); tRef = t; pasosRef = m.pasos; }
+    if (t - ultimaLectura > 250) { actualizarLecturas(pausado ? 0 : ritmo); ultimaLectura = t; }
+    requestAnimationFrame(cuadro);
+  }
+
+  cargar("grifo");
+  if (reducirMovimiento) {
+    avanzar(1500);
+    pausado = true;
+    $("pausa").setAttribute("aria-pressed", "true");
+    $("pausa").textContent = "Continuar";
+  }
+  pintarEscala();
+  pasosRef = m.pasos;
+  requestAnimationFrame(cuadro);
+})();
+</script>

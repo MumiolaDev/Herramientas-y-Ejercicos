@@ -44,7 +44,14 @@
       _gx: new Float64Array(N), _gy: new Float64Array(N), _div: new Float64Array(N),
       _T0: new Float64Array(N), _T1: new Float64Array(N), _k1: new Float64Array(N),
       _k2: new Float64Array(N), _tmp: new Float64Array(N), _rs: new Float64Array(N),
+      // vec[i*N + k] = índice del vecino de k en la dirección i (periódico).
+      // Precalculado: los % dentro de los bucles calientes costaban ~la mitad del paso.
+      vec: new Int32Array(9 * N),
     };
+    for (let i = 0; i < 9; i++)
+      for (let y = 0; y < ny; y++)
+        for (let x = 0; x < nx; x++)
+          m.vec[i * N + y * nx + x] = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
     m.T.fill(p.T0);
     m.Tfuente.fill(p.T0);
     if (p.marco !== false) {
@@ -71,7 +78,7 @@
   }
 
   function pasoFluido(m) {
-    const { nx, ny, N, f, fn, rho, ux, uy, psi, T, solido, p } = m;
+    const { nx, ny, N, f, fn, rho, ux, uy, psi, T, solido, p, vec } = m;
     const tau = p.tau, g = p.gravedad, sig = p.sigma_li;
     const pw = psiPared(m);
     for (let y = 0; y < ny; y++) {
@@ -93,15 +100,12 @@
         const k = y * nx + x;
         if (solido[k]) {
           ux[k] = 0.0; uy[k] = 0.0;
-          for (let i = 0; i < 9; i++) {
-            const d = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
-            fn[i * N + d] = f[i * N + k];
-          }
+          for (let i = 0; i < 9; i++) fn[i * N + vec[i * N + k]] = f[i * N + k];
           continue;
         }
         let sx = 0.0, sy = 0.0;
         for (let i = 1; i < 9; i++) {
-          const v = psi[((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx)];
+          const v = psi[vec[i * N + k]];
           sx += W[i] * v * EX[i];
           sy += W[i] * v * EY[i];
         }
@@ -120,8 +124,7 @@
           const s = (1.0 - 0.5 / tau) * W[i] *
             (3.0 * ((EX[i] - u) * Fx + (EY[i] - v) * Fy) + 9.0 * eu * (EX[i] * Fx + EY[i] * Fy));
           const cli = 3.0 * Q * W[i] * (3.0 * (EX[i] * EX[i] + EY[i] * EY[i]) - 2.0);
-          const d = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
-          fn[i * N + d] = f[i * N + k] - (f[i * N + k] - feq) / tau + s + cli;
+          fn[i * N + vec[i * N + k]] = f[i * N + k] - (f[i * N + k] - feq) / tau + s + cli;
         }
       }
     }
@@ -135,56 +138,51 @@
   }
 
   function gradiente(m, campo, gx, gy) {
-    const { nx, ny } = m;
-    for (let y = 0; y < ny; y++) {
-      for (let x = 0; x < nx; x++) {
-        let sx = 0.0, sy = 0.0;
-        for (let i = 1; i < 9; i++) {
-          const v = campo[((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx)];
-          sx += W[i] * v * EX[i];
-          sy += W[i] * v * EY[i];
-        }
-        gx[y * nx + x] = 3.0 * sx;
-        gy[y * nx + x] = 3.0 * sy;
+    const { N, vec } = m;
+    for (let k = 0; k < N; k++) {
+      let sx = 0.0, sy = 0.0;
+      for (let i = 1; i < 9; i++) {
+        const v = campo[vec[i * N + k]];
+        sx += W[i] * v * EX[i];
+        sy += W[i] * v * EY[i];
       }
+      gx[k] = 3.0 * sx;
+      gy[k] = 3.0 * sy;
     }
   }
 
+  // las 8 direcciones en el orden (dy, dx) = (−1,−1), (−1,0), … (1,1) que usan
+  // numpy y numba al rellenar paredes (el orden de la suma importa al redondeo)
+  const ORDEN_VECINOS = [7, 4, 8, 3, 1, 6, 2, 5];
+
   function rellenar(m, T, salida) {
-    const { nx, ny, solido, fuente } = m;
-    for (let y = 0; y < ny; y++) {
-      for (let x = 0; x < nx; x++) {
-        const k = y * nx + x;
-        if (!solido[k] || fuente[k]) { salida[k] = T[k]; continue; }
-        let suma = 0.0, cuenta = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dy === 0 && dx === 0) continue;
-            const kk = ((y + dy + ny) % ny) * nx + ((x + dx + nx) % nx);
-            if (!solido[kk]) { suma += T[kk]; cuenta++; }
-          }
-        }
-        salida[k] = cuenta > 0 ? suma / cuenta : T[k];
+    const { N, solido, fuente, vec } = m;
+    for (let k = 0; k < N; k++) {
+      if (!solido[k] || fuente[k]) { salida[k] = T[k]; continue; }
+      let suma = 0.0, cuenta = 0;
+      for (let j = 0; j < 8; j++) {
+        const kk = vec[ORDEN_VECINOS[j] * N + k];
+        if (!solido[kk]) { suma += T[kk]; cuenta++; }
       }
+      salida[k] = cuenta > 0 ? suma / cuenta : T[k];
     }
   }
 
   function ladoDerecho(m, T, salida) {
-    const { nx, ny, solido, fuente, ux, uy, p } = m;
+    const { N, solido, fuente, ux, uy, p, vec } = m;
     const rs = m._rs, div = m._div;
-    for (let y = 0; y < ny; y++) {
-      for (let x = 0; x < nx; x++) {
-        const k = y * nx + x;
+    for (let k = 0; k < N; k++) {
         if (solido[k]) { salida[k] = 0.0; continue; }
         const tc = T[k], uxc = ux[k], uyc = uy[k];
         let adv = 0.0;
-        if (uxc > 0.0) adv -= uxc * (tc - T[y * nx + ((x - 1 + nx) % nx)]);
-        else adv -= uxc * (T[y * nx + ((x + 1) % nx)] - tc);
-        if (uyc > 0.0) adv -= uyc * (tc - T[((y - 1 + ny) % ny) * nx + x]);
-        else adv -= uyc * (T[((y + 1) % ny) * nx + x] - tc);
+        // direcciones D2Q9: 1 = +x, 2 = +y (abajo), 3 = −x, 4 = −y
+        if (uxc > 0.0) adv -= uxc * (tc - T[vec[3 * N + k]]);
+        else adv -= uxc * (T[vec[N + k]] - tc);
+        if (uyc > 0.0) adv -= uyc * (tc - T[vec[4 * N + k]]);
+        else adv -= uyc * (T[vec[2 * N + k]] - tc);
         let flujo = 0.0;
         for (let i = 1; i < 5; i++) {
-          const kk = ((y + EY[i] + ny) % ny) * nx + ((x + EX[i] + nx) % nx);
+          const kk = vec[i * N + k];
           const condK = !solido[k] || fuente[k];
           const condV = !solido[kk] || fuente[kk];
           if (condK && condV) {
@@ -195,7 +193,6 @@
         const dif = (p.chi * flujo) / rs[k];
         const comp = (-tc * dpdT(rs[k], p.b, p.R)) / (rs[k] * p.cv) * div[k];
         salida[k] = adv + dif + comp;
-      }
     }
   }
 
