@@ -44,5 +44,5 @@ def test_correccion_de_li_desplaza_epsilon_linealmente(T_reducida):
 def test_parametros_por_defecto_quedan_cerca_de_maxwell():
     m, rg, rl = _losa(0.7, sigma_li=Parametros().sigma_li)
     mx_g, mx_l = m.p.eos.coexistencia(m.T0, epsilon=None)
-    assert rg == pytest.approx(mx_g, rel=0.06)
+    assert rg == pytest.approx(mx_g, rel=0.02)
     assert rl == pytest.approx(mx_l, rel=2e-3)

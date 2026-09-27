@@ -25,7 +25,7 @@ def _parametros_js(m: Mundo) -> dict:
     p, eos = m.p, m.p.eos
     Tc = eos.T_critica
     return dict(
-        tau=p.tau, gravedad=p.gravedad, sigma_li=p.sigma_li, chi=p.chi, mojabilidad=p.mojabilidad,
+        tasas=p.tasas().tolist(), gravedad=p.gravedad, sigma_li=p.sigma_li, chi=p.chi, mojabilidad=p.mojabilidad,
         T0=m.T0, Tc=Tc, Tmin=p.T_min_reducida * Tc, Tmax=p.T_max_reducida * Tc,
         rhoVapor=m.rho_vapor, rhoLiquido=m.rho_liquido, a=eos.a, b=eos.b, R=eos.R, cv=eos.cv,
         isotermico=p.isotermico, marco=False,
@@ -65,3 +65,20 @@ def test_agregar_liquido_js_coincide_con_numpy(tmp_path):
     f_js = np.array(salida["f"]).reshape(m.f.shape)
     assert np.abs(f_js - m.f).max() < 1e-14
     assert salida["masaAgregada"] == pytest.approx(m.masa_agregada, rel=1e-12)
+
+
+def test_entrada_de_velocidad_js_coincide_con_numpy(tmp_path):
+    """La escena grifo: entrada de velocidad impuesta cada paso."""
+    m = Mundo(60, 50, motor="numpy")
+    fila, col = np.mgrid[0:50, 0:60]
+    m.agregar_pared((fila < 12) & ((col == 25) | (col == 34)))
+    entrada = (fila < 3) & (col > 25) & (col < 34)
+    salida = _correr_js(
+        m, 200, tmp_path, mascara_entrada=entrada.ravel().astype(int).tolist(), uy_entrada=0.03, T_entrada=0.7
+    )
+    for _ in range(200):
+        m.imponer_entrada(entrada, uy=0.03, T_reducida=0.7)
+        m.paso(1)
+    assert np.abs(np.array(salida["f"]).reshape(m.f.shape) - m.f).max() < 1e-12
+    assert np.abs(np.array(salida["T"]).reshape(m.T.shape) - m.T).max() < 1e-12
+    assert salida["masaAgregada"] == pytest.approx(m.masa_agregada, rel=1e-10)

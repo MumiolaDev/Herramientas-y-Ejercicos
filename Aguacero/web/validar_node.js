@@ -12,7 +12,10 @@ m.solido.set(e.solido);
 m.fuente.set(e.fuente);
 m.Tfuente.set(e.Tfuente);
 if (e.mascara_liquido) A.agregarLiquido(m, Uint8Array.from(e.mascara_liquido), e.ux || 0, e.uy || 0);
-A.paso(m, e.pasos);
+if (e.mascara_entrada) {
+  const entrada = Uint8Array.from(e.mascara_entrada);
+  for (let s = 0; s < e.pasos; s++) { A.imponerEntrada(m, entrada, 0, e.uy_entrada, e.T_entrada); A.paso(m, 1); }
+} else A.paso(m, e.pasos);
 fs.writeFileSync(
   process.argv[3],
   JSON.stringify({ f: Array.from(m.f), T: Array.from(m.T), ux: Array.from(m.ux), uy: Array.from(m.uy), masaAgregada: m.masaAgregada })

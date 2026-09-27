@@ -27,6 +27,26 @@ EY = E[:, 1].astype(float)[:, None, None]
 W3 = W[:, None, None]
 
 
+# Matriz de momentos de Lallemand & Luo (2000) para este orden de velocidades.
+# Filas: ρ, e (energía), ε (energía²), jx, qx (flujo de energía), jy, qy, pxx, pxy.
+# Las filas son ortogonales, así que M⁻¹ = Mᵀ D⁻¹ con D = diag(Σ fila²).
+M = np.array(
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [-4, -1, -1, -1, -1, 2, 2, 2, 2],
+        [4, -2, -2, -2, -2, 1, 1, 1, 1],
+        [0, 1, 0, -1, 0, 1, -1, -1, 1],
+        [0, -2, 0, 2, 0, 1, -1, -1, 1],
+        [0, 0, 1, 0, -1, 1, 1, -1, -1],
+        [0, 0, -2, 0, 2, 1, 1, -1, -1],
+        [0, 1, -1, 1, -1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 1, -1, 1, -1],
+    ],
+    dtype=float,
+)
+M_INV = M.T / (M**2).sum(axis=1)
+
+
 def equilibrio(rho: np.ndarray, ux: np.ndarray, uy: np.ndarray) -> np.ndarray:
     """Maxwell-Boltzmann truncada a segundo orden en u (lo mínimo para
     recuperar Navier-Stokes vía Chapman-Enskog)."""

@@ -11,6 +11,23 @@
   const EY = [0, 0, 1, 0, -1, 1, 1, -1, -1];
   const W = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
   const OP = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+  // matriz de momentos de Lallemand & Luo (idéntica a aguacero/lattice.py) y su inversa Mᵀ D⁻¹
+  const M = [
+    1, 1, 1, 1, 1, 1, 1, 1, 1,
+    -4, -1, -1, -1, -1, 2, 2, 2, 2,
+    4, -2, -2, -2, -2, 1, 1, 1, 1,
+    0, 1, 0, -1, 0, 1, -1, -1, 1,
+    0, -2, 0, 2, 0, 1, -1, -1, 1,
+    0, 0, 1, 0, -1, 1, 1, -1, -1,
+    0, 0, -2, 0, 2, 1, 1, -1, -1,
+    0, 1, -1, 1, -1, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 1, -1, 1, -1,
+  ];
+  const MI = (function () {
+    const D = [9, 36, 36, 6, 12, 6, 12, 4, 4], r = new Float64Array(81);
+    for (let i = 0; i < 9; i++) for (let a = 0; a < 9; a++) r[i * 9 + a] = M[a * 9 + i] / D[a];
+    return r;
+  })();
 
   function presion(rho, T, a, b, R) {
     const x = (b * rho) / 4.0;
@@ -30,7 +47,7 @@
   }
 
   function crearMundo(ancho, alto, p) {
-    // p: {tau, gravedad, sigma_li, chi, mojabilidad, T0, Tmin, Tmax,
+    // p: {tasas (9 tasas de relajación MRT), gravedad, sigma_li, chi, mojabilidad, T0, Tmin, Tmax,
     //     rhoVapor, rhoLiquido, a, b, R, cv, isotermico, marco}
     const nx = ancho, ny = alto, N = nx * ny;
     const m = {
@@ -79,7 +96,8 @@
 
   function pasoFluido(m) {
     const { nx, ny, N, f, fn, rho, ux, uy, psi, T, solido, p, vec } = m;
-    const tau = p.tau, g = p.gravedad, sig = p.sigma_li;
+    const S = p.tasas, g = p.gravedad, sig = p.sigma_li;
+    const m9 = new Float64Array(9), mc = new Float64Array(9);
     const pw = psiPared(m);
     for (let y = 0; y < ny; y++) {
       for (let x = 0; x < nx; x++) {
@@ -112,19 +130,29 @@
         const r = rho[k];
         const Fxc = psi[k] * sx, Fyc = psi[k] * sy;
         const Fx = Fxc, Fy = Fyc + r * g;
-        const Q = (sig * (Fxc * Fxc + Fyc * Fyc)) / (Math.max(psi[k] * psi[k], 1e-30) * tau);
-        let jx = 0.0, jy = 0.0;
-        for (let i = 0; i < 9; i++) { jx += f[i * N + k] * EX[i]; jy += f[i * N + k] * EY[i]; }
-        const u = (jx + 0.5 * Fx) / r, v = (jy + 0.5 * Fy) / r;
+        const X = (sig * (Fxc * Fxc + Fyc * Fyc)) / Math.max(psi[k] * psi[k], 1e-30);
+        for (let a = 0; a < 9; a++) {
+          let acc = 0.0;
+          for (let i = 0; i < 9; i++) acc += M[a * 9 + i] * f[i * N + k];
+          m9[a] = acc;
+        }
+        const u = (m9[3] + 0.5 * Fx) / r, v = (m9[5] + 0.5 * Fy) / r;
         ux[k] = u; uy[k] = v;
-        const u2 = u * u + v * v;
+        const u2 = u * u + v * v, uF = u * Fx + v * Fy;
+        // m* = m − S(m − m_eq) + (1 − S/2) G + L   (MRT + Guo + Li; ver aguacero/mundo.py)
+        mc[0] = m9[0] - S[0] * (m9[0] - r);
+        mc[1] = m9[1] - S[1] * (m9[1] - r * (-2.0 + 3.0 * u2)) + (1.0 - 0.5 * S[1]) * 6.0 * uF + 12.0 * S[1] * X;
+        mc[2] = m9[2] - S[2] * (m9[2] - r * (1.0 - 3.0 * u2)) - (1.0 - 0.5 * S[2]) * 6.0 * uF - 12.0 * S[2] * X;
+        mc[3] = m9[3] - S[3] * (m9[3] - r * u) + (1.0 - 0.5 * S[3]) * Fx;
+        mc[4] = m9[4] - S[4] * (m9[4] + r * u) - (1.0 - 0.5 * S[4]) * Fx;
+        mc[5] = m9[5] - S[5] * (m9[5] - r * v) + (1.0 - 0.5 * S[5]) * Fy;
+        mc[6] = m9[6] - S[6] * (m9[6] + r * v) - (1.0 - 0.5 * S[6]) * Fy;
+        mc[7] = m9[7] - S[7] * (m9[7] - r * (u * u - v * v)) + (1.0 - 0.5 * S[7]) * 2.0 * (u * Fx - v * Fy);
+        mc[8] = m9[8] - S[8] * (m9[8] - r * u * v) + (1.0 - 0.5 * S[8]) * (u * Fy + v * Fx);
         for (let i = 0; i < 9; i++) {
-          const eu = EX[i] * u + EY[i] * v;
-          const feq = W[i] * r * (1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * u2);
-          const s = (1.0 - 0.5 / tau) * W[i] *
-            (3.0 * ((EX[i] - u) * Fx + (EY[i] - v) * Fy) + 9.0 * eu * (EX[i] * Fx + EY[i] * Fy));
-          const cli = 3.0 * Q * W[i] * (3.0 * (EX[i] * EX[i] + EY[i] * EY[i]) - 2.0);
-          fn[i * N + vec[i * N + k]] = f[i * N + k] - (f[i * N + k] - feq) / tau + s + cli;
+          let acc = 0.0;
+          for (let a = 0; a < 9; a++) acc += MI[i * 9 + a] * mc[a];
+          fn[i * N + vec[i * N + k]] = acc;
         }
       }
     }
@@ -281,6 +309,17 @@
     }
   }
 
+  // entrada de velocidad: equilibrio de líquido fijado cada paso (Mundo.imponer_entrada)
+  function imponerEntrada(m, mascara, u, v, Tred) {
+    for (let k = 0; k < m.N; k++) {
+      if (!mascara[k] || m.solido[k]) continue;
+      const antes = masaEn(m, k);
+      ponerEquilibrio(m, k, m.p.rhoLiquido, u || 0, v || 0);
+      m.masaAgregada += masaEn(m, k) - antes;
+      if (Tred !== undefined && Tred !== null) m.T[k] = Tred * m.p.Tc;
+    }
+  }
+
   function quitarLiquido(m, mascara) {
     for (let k = 0; k < m.N; k++) {
       if (!mascara[k] || m.solido[k]) continue;
@@ -339,7 +378,7 @@
     return { masa, cinetica: cin, potencial: pot, interna: int, total: cin + pot + int, Tliq: nliq ? Tliq / nliq / p.Tc : NaN, pixelesLiquido: nliq };
   }
 
-  const api = { crearMundo, paso, agregarLiquido, quitarLiquido, agregarPared, quitarPared, agregarFuente, observables, presion, ponerEquilibrio };
+  const api = { crearMundo, paso, agregarLiquido, imponerEntrada, quitarLiquido, agregarPared, quitarPared, agregarFuente, observables, presion, ponerEquilibrio };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.Aguacero = api;
 })(typeof self !== "undefined" ? self : this);

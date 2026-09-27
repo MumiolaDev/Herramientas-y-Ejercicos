@@ -83,6 +83,19 @@
   .explica { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
   .explica div { font-size: 13px; color: var(--tinta-suave); max-width: 65ch; }
   .explica b { color: var(--tinta); font-weight: 600; }
+  h2.seccion { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.005em; }
+  .seccion-intro { margin: 2px 0 0; color: var(--tinta-suave); max-width: 75ch; }
+  .render { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+  @media (max-width: 880px) { .render { grid-template-columns: minmax(0, 1fr); } }
+  .video { background: var(--lienzo); border-radius: 6px; overflow: hidden; }
+  .video video { display: block; width: 100%; height: auto; }
+  .etiquetas-video { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--tinta-suave); margin-top: 6px; }
+  .graficos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  @media (max-width: 620px) { .graficos { grid-template-columns: minmax(0, 1fr); } }
+  .grafico h3 { font-size: 12px; font-weight: 500; margin: 0 0 2px; color: var(--tinta-suave); }
+  .grafico svg { display: block; width: 100%; height: 96px; cursor: pointer; touch-action: none; }
+  .grafico .lectura { font: 12px var(--mono); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+  .separador { border: 0; border-top: 1px solid var(--linea); margin: 8px 0 0; }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 
@@ -91,6 +104,34 @@
     <h1>Aguacero</h1>
     <p>Un autómata celular de fluido: cada pixel guarda densidad, velocidad y temperatura, y el agua cae, moja, se evapora y hierve según una ecuación de estado real. Pinta sobre la simulación con el mouse o el dedo.</p>
   </header>
+
+  <section id="renders" hidden>
+    <h2 class="seccion">Alta resolución</h2>
+    <p class="seccion-intro">Corridas offline con el mismo modelo, a la resolución que el problema pide en vez de la que cabe en tiempo real. A la izquierda el agua, a la derecha la temperatura. Toca un gráfico para saltar a ese instante.</p>
+    <div class="barra" style="margin-top:10px">
+      <div class="grupo" role="group" aria-label="Corrida" id="corridas"></div>
+    </div>
+    <div class="render">
+      <div>
+        <div class="video"><video id="video" muted loop playsinline controls preload="metadata"></video></div>
+        <div class="etiquetas-video"><span>izquierda: fracción de líquido · derecha: T/T<sub>c</sub> de 0.55 a 1.20</span><span id="v-paso">paso –</span></div>
+        <div class="graficos" id="graficos"></div>
+      </div>
+      <aside>
+        <div>
+          <h2>Esta corrida</h2>
+          <dl id="ficha"></dl>
+        </div>
+        <p class="nota" id="nota-corrida"></p>
+      </aside>
+    </div>
+    <hr class="separador">
+  </section>
+
+  <section>
+    <h2 class="seccion">Laboratorio en vivo</h2>
+    <p class="seccion-intro">La misma física a 200×150, corriendo en este navegador. Pinta agua, paredes, calor o frío.</p>
+  </section>
 
   <div class="area">
     <section>
@@ -198,11 +239,12 @@
       return null;
     },
     grifo() {
-      A.agregarPared(m, mascara((y, x) => y >= 55 && y < 58 && x > 15 && x < 95));
-      A.agregarPared(m, mascara((y, x) => y >= 95 && y < 98 && x > 80 && x < 170));
-      A.agregarPared(m, mascara((y, x) => y > NY - 40 && x >= 120 && x < 123));
-      const boca = mascara((y, x) => y >= 12 && y < 17 && x >= 40 && x < 47);
-      return (mm) => { if (mm.pasos % 3 === 0) A.agregarLiquido(mm, boca, 0, 0.06); };
+      A.agregarPared(m, mascara((y, x) => y < 22 && (x === 38 || x === 39 || x === 47 || x === 48)));
+      A.agregarPared(m, mascara((y, x) => y >= 55 && y < 58 && x >= 16 && x < 95));
+      A.agregarPared(m, mascara((y, x) => y >= 95 && y < 98 && x >= 81 && x < 170));
+      A.agregarPared(m, mascara((y, x) => y >= NY - 40 && x >= 120 && x < 123));
+      const boca = mascara((y, x) => y < 3 && x >= 40 && x < 47);
+      return (mm) => A.imponerEntrada(mm, boca, 0, 0.03, P.T0 / Tc);
     },
     tetera() {
       A.agregarLiquido(m, mascara((y) => y > NY - 45));
@@ -383,5 +425,110 @@
   pintarEscala();
   pasosRef = m.pasos;
   requestAnimationFrame(cuadro);
+})();
+</script>
+<script>
+(function () {
+  "use strict";
+  const RENDERS = /*__RENDERS__*/;
+  if (!RENDERS.length) return;
+  const $ = (id) => document.getElementById(id);
+  document.getElementById("renders").hidden = false;
+  const video = $("video");
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const SERIES = [
+    { clave: "cinetica", titulo: "Energía cinética", dec: 3 },
+    { clave: "interna", titulo: "Energía interna", dec: 1 },
+    { clave: "umax", titulo: "Rapidez máxima |u| (c = 1)", dec: 3 },
+  ];
+  let actual = null, marcadores = [], lecturas = [], fijo = [];
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function grafico(r, serie, idx) {
+    const vals = r[serie.clave];
+    const n = vals.length;
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (serie.clave !== "interna") lo = 0;
+    if (hi - lo < 1e-12) hi = lo + 1;
+    const X = (i) => (i / (n - 1)) * 300;
+    const Y = (v) => 90 - ((v - lo) / (hi - lo)) * 84;
+    const caja = document.createElement("div");
+    caja.className = "grafico";
+    const h3 = document.createElement("h3");
+    h3.textContent = `${serie.titulo} · ${lo.toFixed(serie.dec)} – ${hi.toFixed(serie.dec)}`;
+    const svg = el("svg", { viewBox: "0 0 300 96", preserveAspectRatio: "none", role: "img", "aria-label": `${serie.titulo} a lo largo de la corrida` });
+    for (const f of [0, 0.5, 1]) svg.appendChild(el("line", { x1: 0, x2: 300, y1: 90 - f * 84, y2: 90 - f * 84, stroke: "var(--linea)", "stroke-width": 1, "vector-effect": "non-scaling-stroke" }));
+    let d = "";
+    vals.forEach((v, i) => { d += (i ? "L" : "M") + X(i).toFixed(2) + " " + Y(v).toFixed(2); });
+    svg.appendChild(el("path", { d: d + `L300 90L0 90Z`, fill: "var(--acento)", "fill-opacity": 0.12, stroke: "none" }));
+    svg.appendChild(el("path", { d, fill: "none", stroke: "var(--acento)", "stroke-width": 2, "vector-effect": "non-scaling-stroke", "stroke-linejoin": "round" }));
+    const marca = el("line", { x1: 0, x2: 0, y1: 0, y2: 96, stroke: "var(--tinta)", "stroke-width": 1, "vector-effect": "non-scaling-stroke" });
+    svg.appendChild(marca);
+    const lectura = document.createElement("div");
+    lectura.className = "lectura";
+    const indice = (ev) => {
+      const b = svg.getBoundingClientRect();
+      return Math.max(0, Math.min(n - 1, Math.round(((ev.clientX - b.left) / b.width) * (n - 1))));
+    };
+    svg.addEventListener("pointermove", (ev) => mostrar(indice(ev)));
+    svg.addEventListener("pointerleave", () => mostrar(null));
+    svg.addEventListener("pointerdown", (ev) => { const i = indice(ev); video.currentTime = (i + 0.5) / r.fps; mostrar(i); });
+    caja.append(h3, svg, lectura);
+    marcadores[idx] = { marca, X, n };
+    lecturas[idx] = { lectura, vals, serie };
+    return caja;
+  }
+
+  function mostrar(iHover) {
+    const iVideo = Math.min(actual.pasos.length - 1, Math.max(0, Math.floor(video.currentTime * actual.fps)));
+    const i = iHover === null ? iVideo : iHover;
+    marcadores.forEach((m) => { const x = m.X(i); m.marca.setAttribute("x1", x); m.marca.setAttribute("x2", x); });
+    lecturas.forEach((l) => { l.lectura.textContent = `paso ${actual.pasos[i].toLocaleString("es-CL")} · ${l.vals[i].toFixed(l.serie.dec)}`; });
+    $("v-paso").textContent = `paso ${actual.pasos[iVideo].toLocaleString("es-CL")}`;
+  }
+
+  function elegir(id) {
+    actual = RENDERS.find((r) => r.id === id);
+    document.querySelectorAll("#corridas button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
+    video.innerHTML = "";
+    for (const [ext, tipo] of [["webm", "video/webm"], ["mp4", "video/mp4"]]) {
+      const src = document.createElement("source");
+      src.src = `${actual.video}.${ext}`; src.type = tipo;
+      video.appendChild(src);
+    }
+    video.load();
+    video.play().catch(() => {});
+    const g = $("graficos");
+    g.innerHTML = ""; marcadores = []; lecturas = [];
+    SERIES.forEach((s, k) => g.appendChild(grafico(actual, s, k)));
+    const ficha = $("ficha");
+    ficha.innerHTML = "";
+    for (const [k, v] of actual.ficha) {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd"); dd.textContent = v;
+      ficha.append(dt, dd);
+    }
+    $("nota-corrida").textContent = actual.nota;
+    mostrar(null);
+  }
+
+  const grupo = $("corridas");
+  RENDERS.forEach((r) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.id = r.id; b.textContent = r.titulo;
+    b.addEventListener("click", () => elegir(r.id));
+    grupo.appendChild(b);
+  });
+  const tick = () => { if (actual) mostrar(null); };
+  if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+    const cb = () => { tick(); video.requestVideoFrameCallback(cb); };
+    video.requestVideoFrameCallback(cb);
+  } else video.addEventListener("timeupdate", tick);
+  elegir(RENDERS[0].id);
 })();
 </script>

@@ -79,7 +79,7 @@ es colisión local + propagación a los vecinos. En el límite hidrodinámico
 ```
 1. momentos     ρ = Σ f_i ,  ρu = Σ f_i e_i + F/2
 2. fuerza       F = F_cohesión(ψ(ρ,T)) + ρ g ŷ
-3. colisión     f_i ← f_i − (f_i − f_i^eq)/τ + S_i^Guo(F) + C_i^Li
+3. colisión     MRT en momentos: m* = m − S(m − m_eq) + (I − S/2)G^Guo + L^Li
 4. propagación  f_i(x + e_i) ← f_i(x)
 5. paredes      rebote completo (bounce-back)
 6. temperatura  Heun (RK2) de ∂T/∂t = −u·∇T + χ∇·(ρ∇T)/ρ − (T/ρc_v)(∂p/∂T)_ρ ∇·u
@@ -98,9 +98,40 @@ trivialmente. Hay dos implementaciones del mismo paso:
   navegador. `tests/test_web_vs_numpy.py` lo corre en node sobre un estado
   exportado desde numpy y exige la misma coincidencia.
 
-Rendimiento medido (4 núcleos): numpy ~11 ms/paso en 160×120; numba
-~1.9 ms/paso en 160×120 y ~2.6 ms/paso en 200×150 (≈ 380 pasos/s: a 8
-pasos por cuadro, ~45 cuadros/s).
+Rendimiento medido (numba, 4 núcleos): ~2.1 ms/paso en 200×150 y
+~7.5 ms/paso en 400×300, unos 70 ns por nodo y paso con temperatura (la
+mitad sin ella). La web (JavaScript, un hilo) va ~4× más lenta.
+
+## Realismo: por qué el agua se veía como glicerina
+
+El número adimensional que decide si un fluido *parece* agua a escala de
+gotas es el de Ohnesorge, Oh = μ/√(ρσL), evaluado en la longitud
+capilar. Medido:
+
+| | ν (red) | Oh(l_c) | Ga(l_c) = g l_c³/ν² |
+|---|---|---|---|
+| primera versión (BGK, τ = 1) | 0.167 | **0.29** | 12 |
+| ahora (MRT, τ = 0.52) | 0.0067 | **0.012** | 7×10³ |
+| agua a 20 °C | — | **0.0023** | 2×10⁵ |
+
+Con τ = 1 el fluido era ~130× demasiado viscoso: todo sobreamortiguado,
+sin salpicaduras, chorros que no se rompen. Y eso también lo hacía
+*sentirse* lento: la dinámica viscosa es lenta.
+
+Bajar τ con BGK no funciona (se cae bajo τ ≈ 0.6 en la escena `gota`),
+porque BGK relaja todos los momentos con la misma tasa y a τ → 1/2 deja
+sin amortiguar los modos que no son físicos. **MRT** (Lallemand & Luo
+2000; Li, Luo & Li 2013) separa las tasas: la viscosidad sale sólo de los
+momentos de esfuerzo, y los demás se fijan donde el esquema es estable
+(s_q = 1.1; s_e = s_ε = 0.5, que agrega viscosidad de volumen y amortigua
+las ondas de compresión). Resultado: estable hasta τ = 0.51 en las tres
+escenas. La constante κ de la corrección de Li no cambia (medida 5.11-5.22
+con s_e = 1 y 0.5), y la viscosidad obtenida coincide con (τ − 1/2)/3 al
+0.2% (`tests/test_mrt.py`, decaimiento de una onda de corte).
+
+Lo que queda para llegar al agua es resolución: con l_c ≈ 19 pixeles, una
+caja de 200×150 mide apenas ~10 longitudes capilares. Por eso existe el
+render offline (abajo).
 
 ### Tres decisiones numéricas que importan
 
@@ -119,9 +150,13 @@ isótropa extra ∝ |∇ψ|² que mueve ε a κσ.
 κ lo **medí** en vez de transcribirlo — la constante publicada usa otra
 normalización de pesos, G y ψ. Con interfaces planas, **un único ε
 predice las dos densidades de coexistencia** a 4-5 cifras, y el cociente
-ε/σ sale igual a 0.8 y 0.9 T_c: κ ≈ 5.2. Con σ = 0.33 (ε ≈ 1.7) la
+ε/σ sale igual a 0.8 y 0.9 T_c: κ ≈ 5.2. Con σ ≈ 0.32 (ε ≈ 1.7) la
 coexistencia simulada cae sobre Maxwell de 0.6 a 0.95 T_c
-(`examples/diagrama_de_fases.py`):
+(`examples/diagrama_de_fases.py`, figura hecha con BGK y σ = 0.33). Con
+la colisión MRT por defecto el valor exacto es σ = 0.317, calibrado para
+que ρ_g coincida con Maxwell a la temperatura de operación (0.7 T_c):
+allí ρ_g cambia ~15% por cada 0.01 de σ, así que conviene recalibrar si
+se cambia T o la colisión.
 
 ![diagrama de fases](docs/diagrama_de_fases.png)
 
@@ -166,24 +201,75 @@ y con h ~ 100 eso ya es 0.1. El número de Bond que cabe en la caja está
 acotado por el número de Mach: **para agua más macroscópica hace falta
 más resolución, no más gravedad**.
 
+## Render offline: resolución en vez de tiempo real
+
+```bash
+python -m aguacero.render grifo --ancho 600 --alto 450 --pasos 36000 --cada 120 \
+    --video salidas/grifo_600.mp4
+```
+
+Corre la escena sin ventana a la resolución pedida y guarda, por cuadro,
+la fracción de líquido y T/T_c (8 bits por pixel) más la serie de masa,
+energías y |u|_máx, en un `.npz`; opcionalmente video (agua y
+temperatura lado a lado, en .mp4 H.264 y .webm VP9). Costo: ~70 ns por nodo y paso, o sea
+600×450 ≈ 20 ms/paso.
+
+Al escalar la caja por k = alto/150 se escala también la gravedad como
+g/k. Con g fijo, la caída a través de una caja 3× más alta es √3× más
+rápida: a 600×450 el vapor expulsado bajo una gota que impacta llegó a
+|u| = 0.44 (Mach 0.76, medido), donde lattice Boltzmann deja de ser
+preciso. Con g/k la velocidad máxima de caída no depende de la
+resolución, y aun así el número de Bond de la caja, Δρ g H²/σ, crece ∝ k:
+la caja grande es físicamente más macroscópica (l_c ≈ 19√k pixeles).
+
+El precio de acotar el Mach se ve en la gota: cae más lento, así que su
+número de Weber (ρv²D/σ) baja de ~86 a ~31 y salpica menos que con g
+fijo. Es el límite de fondo de lattice Boltzmann para salpicaduras
+violentas: más Weber exige gotas más grandes, o sea más resolución.
+
+Dos errores que encontré al escalar, documentados en el código porque
+enseñan algo:
+
+- **El grifo necesita una entrada de velocidad** (`Mundo.imponer_entrada`:
+  equilibrio de líquido fijado cada paso en una capa dentro del tubo), no
+  rellenar con `agregar_liquido` cada pocos pasos. El relleno a pulsos es
+  un pistón que emite una onda de presión en cada golpe: a 600×450 dejó
+  |u| ≈ 0.37 de *mediana* toda la corrida. Con la entrada, p95(|u|) =
+  0.012.
+- **La entrada tiene que tocar el techo.** Al escalar la geometría, la
+  capa de entrada quedó dos filas bajo el techo; el vapor atrapado arriba
+  fue succionado hasta ρ → 0 y la simulación divergió en 100 pasos.
+
+![tetera en alta resolución](docs/tetera_300.png)
+
+Comparada con la tetera viscosa de la primera versión (más arriba), la
+de baja viscosidad hierve de verdad: las burbujas revientan y eyectan
+gotas, al colapsar el cráter sube un chorro de Worthington con una gota
+en la punta, y el líquido se aclara a medida que se calienta y dilata.
+
+La tetera se corre a menor resolución a propósito: el tiempo de
+calentamiento es difusivo, ~H²/χ, y crece ∝ k² en pasos.
+
 ## Validación
 
 | test | qué exige | resultado |
 |---|---|---|
 | `test_coexistencia` (σ=0) | losa plana vs. condición ε=0, sin parámetros libres | coincide a 10⁻³ (ρ_g) y 10⁻⁴ (ρ_l) |
 | `test_coexistencia` (σ=0.2) | el mismo κ a 0.8 y 0.9 T_c predice ambas densidades | 1% (ρ_g), 0.1% (ρ_l) |
-| `test_coexistencia` (defecto) | cercanía a Maxwell a 0.7 T_c | ρ_g a 4%, ρ_l a 0.02% |
+| `test_coexistencia` (defecto) | cercanía a Maxwell a 0.7 T_c | ρ_g a < 2%, ρ_l a 0.02% |
 | `test_laplace` | Δp = σ/R con tres gotas: recta por el origen | residuo < 0.5%, σ = 6.18×10⁻³ |
-| `test_hidrostatica` | dp/dz = ρ_l g en una piscina en reposo | pendiente = 0.992 ρ_l g |
+| `test_hidrostatica` | dp/dz = ρ_l g en una piscina en reposo; corrientes espurias estacionarias y acotadas | pendiente = 0.994 ρ_l g; <\|u\|>_líquido = 2.2×10⁻³ |
 | `test_difusion_termica` | varianza de un pulso crece exactamente 2χ por paso | a 10⁻⁹ (es exacto para este esquema) |
 | `test_conservacion` | masa total con paredes, gravedad y calefactor | constante a 10⁻¹² relativo |
 | `test_conservacion` | conducción pura sobre contraste 40:1: Σρc_vT constante y sin nuevos extremos | a 10⁻¹² |
 | `test_eos` | punto crítico, identidad de la energía interna, ψ ↔ p_EOS, Maxwell ⇒ Δμ = 0 | ✓ |
+| `test_mrt` | MRT con tasas iguales = BGK escrito aparte | a 10⁻¹³ |
+| `test_mrt` | viscosidad por decaimiento de onda de corte, τ = 0.52 y 0.8 | a 0.2% de (τ − 1/2)/3 |
 | `test_numba_vs_numpy` | ambos motores idénticos | a 10⁻¹² (medido ~10⁻¹⁵) |
-| `test_web_vs_numpy` | el motor JavaScript (vía node) idéntico a numpy, paso y herramienta de agua | a 10⁻¹² |
+| `test_web_vs_numpy` | el motor JavaScript (vía node) idéntico a numpy: paso, herramienta de agua y entrada de velocidad | a 10⁻¹² |
 
 ```bash
-python -m pytest -q     # 17 tests, ~30 s con numba (los de web/ se saltan sin node)
+python -m pytest -q     # 21 tests, ~40 s con numba (los de web/ se saltan sin node)
 ```
 
 ## Lo que NO hace (dicho de frente)
@@ -194,11 +280,14 @@ python -m pytest -q     # 17 tests, ~30 s con numba (los de web/ se saltan sin n
   masa la mueve lattice Boltzmann: en una caja aislada y en reposo la
   energía total deriva ~+0.04% cada 1000 pasos. El panel la muestra;
   no se asume.
-- **Corrientes espurias.** Junto a las interfaces curvas y, sobre todo, a
-  las líneas de contacto con paredes, el vapor tiene velocidades
-  residuales de hasta |u| ~ 0.02 aun en equilibrio (el líquido queda en
-  < 10⁻³). Es el artefacto clásico del pseudopotencial; MRT o
-  estencils de mayor isotropía lo reducen.
+- **Corrientes espurias, y crecen al bajar la viscosidad.** Junto a las
+  interfaces curvas y sobre todo a las líneas de contacto con paredes
+  quedan velocidades residuales estacionarias aun en equilibrio. Escalan
+  como ~1/ν: en una piscina en reposo el líquido queda en <|u|> ≈
+  2.5×10⁻⁴ con τ = 0.8 y ≈ 2.2×10⁻³ con el τ = 0.52 por defecto (el vapor
+  junto a la pared, ~10× más). Frente a flujos de |u| ~ 0.05-0.1 es un
+  2-4%: el precio de un fluido menos viscoso. Estencils de mayor
+  isotropía (vecinos a distancia 2) lo reducen.
 - **Mojabilidad acotada**: `mojabilidad` > ~0.25 hace que las paredes
   condensen el vapor de forma violenta y la simulación explota.
 - **Rango de temperatura**: estable ~0.6-1.2 T_c. Por seguridad ψ se
@@ -276,6 +365,7 @@ aguacero/
   nucleo_numba.py  el mismo paso compilado
   escenas.py       gota · grifo · tetera
   visor.py         visor/editor interactivo en pygame (python -m aguacero)
+  render.py        render offline a alta resolución → .npz + video (python -m aguacero.render)
 web/
   nucleo.js        el paso en JavaScript (navegador y node)
   plantilla.html   la página: lienzo, pinceles, lecturas y sonda por pixel
@@ -284,7 +374,7 @@ web/
 examples/
   diagrama_de_fases.py   coexistencia simulada vs. Maxwell (la figura de arriba)
   capturas_escenas.py    tiras de cuadros de las tres escenas, sin ventana
-tests/                   17 tests, ver tabla
+tests/                   21 tests, ver tabla
 ```
 
 ## Por hacer
@@ -292,7 +382,9 @@ tests/                   17 tests, ver tabla
 - Ecuación de energía en forma conservativa (ρc_vT como variable, con el
   mismo flujo de masa que la red) + calentamiento viscoso → balance de
   energía cerrado.
-- Colisión MRT: viscosidades menores (agua "menos espesa") y razones de
-  densidad mayores con menos corrientes espurias.
+- Estencil de interacción de mayor isotropía (vecinos a distancia 2) para
+  bajar las corrientes espurias que el MRT de baja viscosidad amplifica.
+- Razones de densidad mayores (T de operación más baja o parámetro *a*
+  menor, con recalibración de σ).
 - Modo superficie libre (Körner et al.) para agua macroscópica.
 - Backend ASCII para la terminal (como en Colapsoscopio).
